@@ -68,7 +68,7 @@ char *output_to_str(size_t nonterm) {
     bool *val = NULL ;
     LAGraph_Malloc ((void **) &row, nnz, sizeof (GrB_Index), msg) ;
     LAGraph_Malloc ((void **) &col, nnz, sizeof (GrB_Index), msg) ;
-    LAGraph_Malloc ((void **) &val, nnz, sizeof (GrB_Index), msg) ;
+    LAGraph_Malloc ((void **) &val, nnz, sizeof (bool), msg) ;
 
     OK(GrB_Matrix_extractTuples(row, col, val, &nnz, outputs[nonterm]));
 
@@ -224,6 +224,31 @@ void init_grammar_complex() {
 
     grammar = (grammar_t){
         .nonterms_count = 25, .terms_count = 2, .rules_count = 26, .rules = rules};
+}
+
+// Grammar of parentheses in WCNF 
+//
+// Terms: [0 (] [1 )]
+// Nonterms: [0 S] [1 C] [2 L] [3 R]
+// S -> S S  [0 0 0 0]
+// S -> L C  [0 2 1 0]
+// C -> R S  [1 3 0 0]
+// L -> (    [2 0 -1 0]
+// R -> )    [3 1 -1 0]
+// S -> eps  [0 -1 -1 0]
+void init_grammar_parentheses() {
+    LAGraph_rule_WCNF *rules = NULL ;
+    LAGraph_Calloc ((void **) &rules, 6, sizeof(LAGraph_rule_WCNF), msg);
+
+    rules[0] = (LAGraph_rule_WCNF){0, 0, 0, 0};   // S -> S S 
+    rules[1] = (LAGraph_rule_WCNF){0, 2, 1, 0};   // S -> L C
+    rules[2] = (LAGraph_rule_WCNF){1, 0, 3, 0};   // C -> S R
+    rules[3] = (LAGraph_rule_WCNF){2, 0, -1, 0};  // L -> (
+    rules[4] = (LAGraph_rule_WCNF){3, 1, -1, 0};  // R -> )
+    rules[5] = (LAGraph_rule_WCNF){0, -1, -1, 0}; // S -> eps
+
+    grammar = (grammar_t){
+        .nonterms_count = 4, .terms_count = 2, .rules_count = 6, .rules = rules};
 }
 
 //====================
@@ -434,6 +459,35 @@ void init_graph_4() {
     adj_matrices[1] = adj_matrix_b;
 }
 
+// Graph:
+
+// 0 -(-> 1
+// 1 -)-> 2
+// 2 -(-> 3
+// 3 -)-> 4
+// 0 -(-> 5
+// 5 -(-> 3
+// 3 -)-> 4
+void init_graph_parentheses() {
+    LAGraph_Calloc ((void **) &adj_matrices, 2, sizeof (GrB_Matrix), msg);
+    n_adj_matrices = 2;
+
+    GrB_Matrix adj_matrix_open, adj_matrix_close;
+    GrB_Matrix_new(&adj_matrix_open, GrB_BOOL, 6, 6);
+    GrB_Matrix_new(&adj_matrix_close, GrB_BOOL, 6, 6);  
+
+    OK(GrB_Matrix_setElement(adj_matrix_open, true, 0, 1));
+    OK(GrB_Matrix_setElement(adj_matrix_open, true, 0, 5));
+    OK(GrB_Matrix_setElement(adj_matrix_open, true, 2, 3));
+    OK(GrB_Matrix_setElement(adj_matrix_open, true, 5, 3));
+
+    OK(GrB_Matrix_setElement(adj_matrix_close, true, 1, 2));
+    OK(GrB_Matrix_setElement(adj_matrix_close, true, 3, 4));
+
+    adj_matrices[0] = adj_matrix_open;
+    adj_matrices[1] = adj_matrix_close;
+}
+
 //====================
 // Tests with valid result
 //====================
@@ -575,6 +629,23 @@ void test_CFL_reachability_with_empty_adj_matrix(void) {
 #endif
 }
 
+void test_CFL_reachability_parentheses(void) {
+#if LAGRAPH_SUITESPARSE
+    setup();
+    GrB_Info retval;
+
+    init_grammar_parentheses();
+    init_graph_parentheses();
+    init_outputs() ;
+
+    OK(run_algorithm());
+    check_result("(0, 0) (0, 2) (0, 4) (1, 1) (2, 2) (2, 4) (3, 3) (4, 4) (5, 4) (5, 5)");
+
+    free_workspace();
+    teardown();
+#endif
+}
+
 //====================
 // Tests with invalid result
 //====================
@@ -672,6 +743,7 @@ TEST_LIST = {{"CFL_reachability_complex_grammar", test_CFL_reachability_complex_
              {"CFL_reachability_two_nodes_cycle", test_CFL_reachability_two_nodes_cycle},
              {"CFG_reach_basic_invalid_rules", test_CFL_reachability_invalid_rules},
              {"test_CFL_reachability_with_empty_adj_matrix", test_CFL_reachability_with_empty_adj_matrix},
+             {"test_CFL_reachability_parentheses", test_CFL_reachability_parentheses},
              #if !defined ( GRAPHBLAS_HAS_CUDA )
              {"CFG_reachability_null_pointers", test_CFL_reachability_null_pointers},
              #endif

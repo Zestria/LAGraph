@@ -211,7 +211,7 @@ typedef struct
     GrB_Index src;
     int label; // terminal label index
     GrB_Index dst;
-} Edge;
+} GraphEdge;
 
 // a single RSM transition
 typedef struct
@@ -303,7 +303,7 @@ static void init_rsm_raw(size_t num_term, size_t num_nonterm, size_t start_nt, G
 }
 
 // build the per-terminal graph matrices from an edge list
-static void init_graph(GrB_Index n_vertices, size_t n_labels, const Edge *edges, size_t n_edges)
+static void init_graph(GrB_Index n_vertices, size_t n_labels, const GraphEdge *edges, size_t n_edges)
 {
     V = (size_t)n_vertices;
     n_graph_term = n_labels;
@@ -515,7 +515,7 @@ static void init_rsm_raw_abcd(void)
 //==============================================================================
 
 // 0-a->1; 1-a->2; 2-a->0; 1-b->3; 3-b->1   (V=4, a=0, b=1)
-static const Edge g_cyclic[] = {
+static const GraphEdge g_cyclic[] = {
     {0, 0, 1},
     {1, 0, 2},
     {2, 0, 0},
@@ -524,20 +524,20 @@ static const Edge g_cyclic[] = {
 };
 
 // 0-a->1; 1-a->2; 2-a->3   (V=4, a=0)
-static const Edge g_chain_right[] = {
+static const GraphEdge g_chain_right[] = {
     {0, 0, 1},
     {1, 0, 2},
     {2, 0, 3},
 };
 
 // 0-a->1; 1-a->2   (V=3, a=0)
-static const Edge g_chain_left[] = {
+static const GraphEdge g_chain_left[] = {
     {0, 0, 1},
     {1, 0, 2},
 };
 
 // 0-a->1; 1-a->2; 2-b->3; 3-b->4   (V=5, a=0, b=1)
-static const Edge g_dyck_linear[] = {
+static const GraphEdge g_dyck_linear[] = {
     {0, 0, 1},
     {1, 0, 2},
     {2, 1, 3},
@@ -545,39 +545,39 @@ static const Edge g_dyck_linear[] = {
 };
 
 // 0-a->0; 0-b->0   (V=1, a=0, b=1)
-static const Edge g_dyck_self_loop[] = {
+static const GraphEdge g_dyck_self_loop[] = {
     {0, 0, 0},
     {0, 1, 0},
 };
 
 // 0-a->1   (V=2, a=0)
-static const Edge g_epsilon[] = {
+static const GraphEdge g_epsilon[] = {
     {0, 0, 1},
 };
 
 // 0-a->1; 1-a->0; 0-a->2   (V=3, a=0)
-static const Edge g_even[] = {
+static const GraphEdge g_even[] = {
     {0, 0, 1},
     {1, 0, 0},
     {0, 0, 2},
 };
 
 // 0-a->1; 1-a->0; 0-b->2   (V=3, a=0, b=1)
-static const Edge g_no_match[] = {
+static const GraphEdge g_no_match[] = {
     {0, 0, 1},
     {1, 0, 0},
     {0, 1, 2},
 };
 
 // 0-a->1; 1-a->2; 2-a->3   (V=4, a=0)  -- same shape as g_chain_right
-static const Edge g_ambig[] = {
+static const GraphEdge g_ambig[] = {
     {0, 0, 1},
     {1, 0, 2},
     {2, 0, 3},
 };
 
 // 0-a->1; 1-b->2; 0-b->3   (V=4, a=0, b=1)
-static const Edge g_three[] = {
+static const GraphEdge g_three[] = {
     {0, 0, 1},
     {1, 1, 2},
     {0, 1, 3},
@@ -585,7 +585,7 @@ static const Edge g_three[] = {
 
 // 0-a->1; 1-a->2; 2-a->0;
 // 1-b->3; 3-b->4; 4-b->5; 5-b->6; 6-b->1   (V=7, a=0, b=1)
-static const Edge g_cyclic_3a_5b[] = {
+static const GraphEdge g_cyclic_3a_5b[] = {
     {0, 0, 1},
     {1, 0, 2},
     {2, 0, 0},
@@ -597,14 +597,14 @@ static const Edge g_cyclic_3a_5b[] = {
 };
 
 // 0-a->0; 0-b->1; 1-b->1   (V=2, a=0, b=1)
-static const Edge g_reg_ab[] = {
+static const GraphEdge g_reg_ab[] = {
     {0, 0, 0},
     {0, 1, 1},
     {1, 1, 1},
 };
 
 // 0-a->1; 1-a->2; 2-a->0   (V=3, a=0)
-static const Edge g_left_cycle[] = {
+static const GraphEdge g_left_cycle[] = {
     {0, 0, 1},
     {1, 0, 2},
     {2, 0, 0},
@@ -612,7 +612,7 @@ static const Edge g_left_cycle[] = {
 
 // 0-a->1; 1-a->2; 2-a->0; 1-d->3; 3-d->4; 4-d->0;
 // 0-b->5; 5-b->0; 6-c->0; 0-c->6   (V=7, a=0, b=1, c=2, d=3)
-static const Edge g_abcd_start1[] = {
+static const GraphEdge g_abcd_start1[] = {
     {0, 0, 1},
     {1, 0, 2},
     {2, 0, 0},
@@ -626,7 +626,7 @@ static const Edge g_abcd_start1[] = {
 };
 
 // same as g_abcd_start1 but with 0-d->3 instead of 1-d->3
-static const Edge g_abcd_start6[] = {
+static const GraphEdge g_abcd_start6[] = {
     {0, 0, 1},
     {1, 0, 2},
     {2, 0, 0},

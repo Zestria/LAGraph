@@ -57,20 +57,6 @@
             return _hi;                                                                            \
     }
 
-static inline GrB_Info reshape( // input/output:
-    GrB_Matrix C,               // input/output matrix, reshaped in place
-    bool by_col,                // true if reshape by column, false if by row
-    GrB_Index nrows_new,        // new number of rows of C
-    GrB_Index ncols_new,        // new number of columns of C
-    const GrB_Descriptor desc   // to control # of threads used
-)
-{
-    if (C == NULL)
-        return GrB_NULL_POINTER;
-
-    return GxB_Matrix_reshape(C, by_col, nrows_new, ncols_new, desc);
-}
-
 static GrB_Info s_mxm_chain(GrB_Matrix C,      // output accumulator  |Q|*|V*V|
                             GrB_Matrix A,      // RSM matrix          |Q|*|Q|
                             GrB_Matrix M,      // frontier            |Q|*|V*V|

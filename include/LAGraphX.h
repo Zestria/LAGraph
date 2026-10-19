@@ -1112,6 +1112,9 @@ typedef struct
 int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *graph_term,
                      const GrB_Index *sources, size_t num_sources, GrB_Index V, char *msg);
 
+int LAGraph_CFPQ_RSM_blocked(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *graph_term,
+                             const GrB_Index *sources, size_t num_sources, GrB_Index V, char *msg);
+
 //------------------------------------------------------------------------------
 // a simple example of an algorithm
 //------------------------------------------------------------------------------

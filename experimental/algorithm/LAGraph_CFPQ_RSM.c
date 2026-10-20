@@ -74,7 +74,7 @@ static GrB_Info s_unshift(GrB_Matrix temp1, GrB_Index Q, GrB_Index V)
 }
 
 static GrB_Info s_mul_acc(GrB_Matrix C,     // output accumulator |Q|*|VV|
-                          GrB_Matrix temp1, // shifted frontier   |QV|*|V|
+                          GrB_Matrix A,     // shifted frontier   |QV|*|V|
                           GrB_Matrix B,     // graph matrix       |V|*|V|
                           GrB_Matrix temp2, // scratch            |Q|*|VV|
                           GrB_Index Q, GrB_Index V)
@@ -83,7 +83,7 @@ static GrB_Info s_mul_acc(GrB_Matrix C,     // output accumulator |Q|*|VV|
     H_TRY(GxB_Matrix_reshape(temp2, false, Q*V, V, GrB_NULL));
 
     // scratch = Xr * B -> |Q*V|*|V|
-    H_TRY(GrB_mxm(temp2, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, temp1, B, GrB_NULL));
+    H_TRY(GrB_mxm(temp2, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, A, B, GrB_NULL));
 
     // reshape(scratch): |Q*V|*|V| -> |Q|*|V*V|
     H_TRY(GxB_Matrix_reshape(temp2, false, Q, V * V, GrB_NULL));
@@ -154,6 +154,7 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
     GrB_Vector source_mask = GrB_NULL;
 
     GrB_Matrix *graph_nt = NULL;
+    GrB_Matrix *W = NULL; // W[i] = (rsm_nonterm[i])^T * P, |QV|*|V| size
     GrB_Vector *rsm_start = NULL; // rsm_start[S][i] = true, iff start_states[S] = i
 
     LG_ASSERT(reachable != NULL, GrB_NULL_POINTER);
@@ -168,11 +169,13 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
 
     // allocate per-nonterminal arrays
     LG_TRY(LAGraph_Malloc((void **)&graph_nt, rsm->nonterminal_count, sizeof(GrB_Matrix), msg));
+    LG_TRY(LAGraph_Malloc((void **)&W, rsm->nonterminal_count, sizeof(GrB_Matrix), msg));
     LG_TRY(LAGraph_Malloc((void **)&rsm_start, rsm->nonterminal_count, sizeof(GrB_Vector), msg));
 
     for (size_t i = 0; i < num_nonterm; ++i)
     {
         graph_nt[i] = GrB_NULL;
+        W[i] = GrB_NULL;
         rsm_start[i] = GrB_NULL;
     }
 
@@ -181,6 +184,8 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
         GRB_TRY(GrB_Matrix_new(&graph_nt[i], GrB_BOOL, V, V));
         GRB_TRY(GrB_Vector_new(&rsm_start[i], GrB_BOOL, Q));
         GrB_Vector_setElement_BOOL(rsm_start[i], true, start_states[i]);
+        if (rsm_nonterm[i] != GrB_NULL)
+            GRB_TRY(GrB_Matrix_new(&W[i], GrB_BOOL, Q*V, V));
     }
 
     // allocate working matrices
@@ -292,6 +297,9 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
                 GRB_TRY(GrB_Matrix_nvals(&gnt_nvals, graph_nt[i]));
                 if (gnt_nvals > 0)
                     LG_TRY(s_mul_acc(M_nonterm, temp1, graph_nt[i], temp2, Q, V));
+                
+                // RETURN bookkeeping: W |= X_A (P grows by exactly M, so W = R_A^T * P holds)
+                GRB_TRY(GrB_eWiseAdd(W[i], GrB_NULL, GrB_NULL, GrB_LOR, W[i], temp1, GrB_NULL));
             }
             LG_TRY(s_unshift(temp1, Q, V));
         }
@@ -327,7 +335,11 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
             GRB_TRY(GrB_eWiseAdd(graph_nt[i], GrB_NULL, GrB_NULL, GrB_LOR, graph_nt[i], new_edges,
                                  GrB_NULL));
 
-            LG_TRY(s_mxm_chain(M_return, rsm_nonterm[i], P, new_edges, temp1, temp2, Q, V));
+            // M_return |= W * dG, where W = R_A^T * P
+            GrB_Index w_nvals = 0;
+            GRB_TRY(GrB_Matrix_nvals(&w_nvals, W[i]));
+            if (w_nvals > 0)
+                LG_TRY(s_mul_acc(M_return, W[i], new_edges, temp2, Q, V));
 
             GRB_TRY(GxB_Matrix_reshape(new_edges, false, 1, VV, GrB_NULL));
         }

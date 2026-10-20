@@ -340,6 +340,16 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
                 continue;
 
             GRB_TRY(GxB_Matrix_reshape(new_edges, false, V, V, GrB_NULL));
+
+            // dG = new_edges \ graph_nt[i]
+            GRB_TRY(GrB_apply(new_edges, graph_nt[i], GrB_NULL, GrB_IDENTITY_BOOL, new_edges, GrB_DESC_RSC));
+            GRB_TRY(GrB_Matrix_nvals(&ne_vals, new_edges));
+            if (ne_vals == 0)
+            {
+                GRB_TRY(GxB_Matrix_reshape(new_edges, false, 1, VV, GrB_NULL));
+                continue;
+            }
+
             GRB_TRY(GrB_eWiseAdd(graph_nt[i], GrB_NULL, GrB_NULL, GrB_LOR, graph_nt[i], new_edges,
                                  GrB_NULL));
 

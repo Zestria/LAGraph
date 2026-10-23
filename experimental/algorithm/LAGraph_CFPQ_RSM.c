@@ -17,6 +17,18 @@
         GrB_free(&M_new);                                                                          \
         GrB_free(&scratch);                                                                        \
         GrB_free(&s_temp);                                                                         \
+        GrB_free(&rowvec);                                                                         \
+        LAGraph_Free((void **)&term_active, NULL);                                                 \
+        if (term_src != NULL)                                                                      \
+        {                                                                                          \
+            for (size_t _k = 0; _k < (size_t) num_term; ++_k)                                     \
+                LAGraph_Free((void **)&term_src[_k], NULL);                                        \
+            LAGraph_Free((void **)&term_src, NULL);                                                \
+        }                                                                                          \
+        LAGraph_Free((void **)&term_src_count, NULL);                                              \
+        LAGraph_Free((void **)&active, NULL);                                                      \
+        LAGraph_Free((void **)&active_idx, NULL);                                                  \
+        LAGraph_Free((void **)&active_vals, NULL);                                                 \
         GrB_free(&new_edges);                                                                      \
         GrB_free(&diag_entry);                                                                     \
         GrB_free(&entry_vec);                                                                      \
@@ -40,6 +52,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #define H_TRY(expr)                                                                                \
     {                                                                                              \
         GrB_Info _hi = (expr);                                                                     \
@@ -120,11 +133,21 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
     GrB_Matrix diag_entry = GrB_NULL;
     GrB_Vector entry_vec = GrB_NULL;
     GrB_Vector source_mask = GrB_NULL;
+    GrB_Vector rowvec = GrB_NULL; // length-Q row activity of M
 
     GrB_Matrix *graph_nt = NULL;
     GrB_Matrix *W = NULL;         // QV x V, W[i] = (rsm_nonterm[i])^T * P
     GrB_Matrix *rsm_start = NULL; // Q x 1, rsm_start[S][i] = true, iff start_states[S] = i
+    GrB_Index num_term = 0;
     GrB_Index num_nonterm = 0;
+
+    // G=2 bookkeeping, declared before any assertion so cleanup is safe
+    bool *term_active = NULL;
+    GrB_Index **term_src = NULL;
+    size_t *term_src_count = NULL;
+    bool *active = NULL;
+    GrB_Index *active_idx = NULL;
+    bool *active_vals = NULL;
 
     LG_ASSERT(reachable != NULL, GrB_NULL_POINTER);
     *reachable = GrB_NULL;
@@ -132,7 +155,7 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
 
     // shortcuts
     GrB_Index Q = rsm->state_count;
-    GrB_Index num_term = rsm->terminal_count;
+    num_term = rsm->terminal_count;
     num_nonterm = rsm->nonterminal_count;
     GrB_Index start_nonterm = rsm->start_nonterminal;
     GrB_Matrix *rsm_term = rsm->terminal_matrices;
@@ -181,6 +204,53 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
     GRB_TRY(GrB_Vector_new(&entry_vec, GrB_BOOL, V));
     GRB_TRY(GrB_Vector_new(&source_mask, GrB_BOOL, V));
 
+    // G=2: static per-terminal emptiness and source-state patterns, computed
+    // once per call.  Terminals with no entries in either operand are never
+    // shifted; the remaining chains are predicted from active rows of M.
+    if (num_term > 0)
+    {
+        LG_TRY(LAGraph_Malloc((void **) &term_active, num_term, sizeof(bool), msg));
+        for (size_t i = 0; i < num_term; ++i)
+            term_active[i] = false;
+
+        LG_TRY(LAGraph_Malloc((void **) &term_src, num_term, sizeof(GrB_Index *), msg));
+        for (size_t i = 0; i < num_term; ++i)
+            term_src[i] = NULL;
+
+        LG_TRY(LAGraph_Malloc((void **) &term_src_count, num_term, sizeof(size_t), msg));
+        for (size_t i = 0; i < num_term; ++i)
+            term_src_count[i] = 0;
+
+        for (size_t i = 0; i < num_term; ++i)
+        {
+            if (rsm_term[i] == GrB_NULL || graph_term[i] == GrB_NULL)
+                continue;
+
+            GrB_Index rn = 0, gn = 0;
+            GRB_TRY(GrB_Matrix_nvals(&rn, rsm_term[i]));
+            GRB_TRY(GrB_Matrix_nvals(&gn, graph_term[i]));
+            if (rn == 0 || gn == 0)
+                continue;
+
+            term_active[i] = true;
+            LG_TRY(LAGraph_Malloc((void **) &term_src[i], rn, sizeof(GrB_Index), msg));
+            GrB_Index rn2 = rn;
+            GRB_TRY(GrB_Matrix_extractTuples_BOOL(term_src[i], NULL, NULL, &rn2, rsm_term[i]));
+            term_src_count[i] = (size_t) rn2;
+        }
+    }
+
+    // G=2: row-active prediction scratch, plus the dense Q-entry lookup.
+    if (Q > 0)
+    {
+        GRB_TRY(GrB_Vector_new(&rowvec, GrB_BOOL, Q));
+        LG_TRY(LAGraph_Malloc((void **) &active, Q, sizeof(bool), msg));
+        LG_TRY(LAGraph_Malloc((void **) &active_idx, Q, sizeof(GrB_Index), msg));
+        LG_TRY(LAGraph_Malloc((void **) &active_vals, Q, sizeof(bool), msg));
+        for (GrB_Index i = 0; i < Q; ++i)
+            active[i] = false;
+    }
+
     // each source s starts a call to the start nonterminal at (s, s)
     GrB_Index start_state = start_states[start_nonterm];
     for (size_t i = 0; i < num_sources; ++i)
@@ -195,12 +265,46 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
     GRB_TRY(GrB_Matrix_nvals(&m_nvals, M));
     while (m_nvals > 0)
     {
-        // Phase 1: terminal transitions
+        // G=2: mark rows of M that currently contain any true entry.
+        if (Q > 0)
+        {
+            GRB_TRY(GrB_Vector_clear(rowvec));
+            GRB_TRY(GrB_reduce(rowvec, GrB_NULL, GrB_NULL, GrB_LOR_MONOID_BOOL, M, GrB_NULL));
+            GrB_Index nactive = 0;
+            GRB_TRY(GrB_Vector_nvals(&nactive, rowvec));
+            GrB_Index nactive2 = nactive;
+            GRB_TRY(GrB_Vector_extractTuples_BOOL(active_idx, active_vals, &nactive2, rowvec));
+            memset(active, 0, (size_t) Q * sizeof(bool));
+            for (GrB_Index k = 0; k < nactive2; ++k)
+                active[active_idx[k]] = true;
+        }
+
+        // Phase 1: terminal transitions.  T = A_i^T * M is nonempty only if
+        // some source state of A_i is an active row of M, so whole chains can
+        // be skipped before the shift.
         for (size_t i = 0; i < num_term; ++i)
         {
-            if (rsm_term[i] == GrB_NULL || graph_term[i] == GrB_NULL)
+            if (!term_active[i])
                 continue;
-            LG_TRY(s_mxm_chain(acc, rsm_term[i], M, graph_term[i], scratch, s_temp, Q, V));
+
+            bool predicted = false;
+            for (size_t k = 0; k < term_src_count[i]; ++k)
+            {
+                if (active[term_src[i][k]])
+                {
+                    predicted = true;
+                    break;
+                }
+            }
+            if (!predicted)
+                continue;
+
+            LG_TRY(s_shift(scratch, rsm_term[i], M, Q, V));
+            GrB_Index tn = 0;
+            GRB_TRY(GrB_Matrix_nvals(&tn, scratch));
+            if (tn > 0)
+                LG_TRY(s_mul_acc(acc, scratch, graph_term[i], s_temp));
+            LG_TRY(s_unshift(scratch, Q, V));
         }
 
         // Phases 2+3: nonterminal transitions and calls

@@ -16,6 +16,7 @@
         GrB_free(&M_call);                                                                         \
         GrB_free(&M_new);                                                                          \
         GrB_free(&scratch);                                                                        \
+        GrB_free(&s_temp);                                                                         \
         GrB_free(&new_edges);                                                                      \
         GrB_free(&diag_entry);                                                                     \
         GrB_free(&entry_vec);                                                                      \
@@ -64,10 +65,12 @@ static GrB_Info s_unshift(GrB_Matrix T, GrB_Index Q, GrB_Index V)
     return GrB_SUCCESS;
 }
 
-// C |= A * B
-static GrB_Info s_mul_acc(GrB_Matrix C, GrB_Matrix A, GrB_Matrix B)
+// C |= A * B, using one reused QV x V product temporary.
+static GrB_Info s_mul_acc(GrB_Matrix C, GrB_Matrix A, GrB_Matrix B, GrB_Matrix T)
 {
-    H_TRY(GrB_mxm(C, GrB_NULL, GrB_LOR, GrB_LOR_LAND_SEMIRING_BOOL, A, B, GrB_NULL));
+    H_TRY(GrB_Matrix_clear(T));
+    H_TRY(GrB_mxm(T, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, A, B, GrB_NULL));
+    H_TRY(GrB_eWiseAdd(C, GrB_NULL, GrB_NULL, GrB_LOR, C, T, GrB_NULL));
     return GrB_SUCCESS;
 }
 
@@ -76,11 +79,12 @@ static GrB_Info s_mxm_chain(GrB_Matrix C,       // output accumulator QV x V
                             GrB_Matrix A,       // RSM matrix         Q x Q
                             GrB_Matrix M,       // frontier           Q x VV
                             GrB_Matrix B,       // graph matrix       V x V
-                            GrB_Matrix T,      // scratch             Q x VV
+                            GrB_Matrix T,       // scratch             Q x VV
+                            GrB_Matrix T2,      // product scratch    QV x V
                             GrB_Index Q, GrB_Index V)
 {
     H_TRY(s_shift(T, A, M, Q, V));
-    H_TRY(s_mul_acc(C, T, B));
+    H_TRY(s_mul_acc(C, T, B, T2));
     H_TRY(s_unshift(T, Q, V));
     return GrB_SUCCESS;
 }
@@ -111,6 +115,7 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
     GrB_Matrix M_call = GrB_NULL;
     GrB_Matrix M_new = GrB_NULL;
     GrB_Matrix scratch = GrB_NULL;
+    GrB_Matrix s_temp = GrB_NULL; // QV x V product scratch for s_mul_acc
     GrB_Matrix new_edges = GrB_NULL;
     GrB_Matrix diag_entry = GrB_NULL;
     GrB_Vector entry_vec = GrB_NULL;
@@ -170,6 +175,7 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
     GRB_TRY(GrB_Matrix_new(&acc, GrB_BOOL, Q*V, V));
     GRB_TRY(GrB_Matrix_new(&M_call, GrB_BOOL, Q, V * V));
     GRB_TRY(GrB_Matrix_new(&scratch, GrB_BOOL, Q, V * V));
+    GRB_TRY(GrB_Matrix_new(&s_temp, GrB_BOOL, Q * V, V));
     GRB_TRY(GrB_Matrix_new(&new_edges, GrB_BOOL, 1, V * V));
     // there is no need to create matrix for diag_entry
     GRB_TRY(GrB_Vector_new(&entry_vec, GrB_BOOL, V));
@@ -194,7 +200,7 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
         {
             if (rsm_term[i] == GrB_NULL || graph_term[i] == GrB_NULL)
                 continue;
-            LG_TRY(s_mxm_chain(acc, rsm_term[i], M, graph_term[i], scratch, Q, V));
+            LG_TRY(s_mxm_chain(acc, rsm_term[i], M, graph_term[i], scratch, s_temp, Q, V));
         }
 
         // Phases 2+3: nonterminal transitions and calls
@@ -225,7 +231,7 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
                 GrB_Index gnt_nvals = 0;
                 GRB_TRY(GrB_Matrix_nvals(&gnt_nvals, graph_nt[i]));
                 if (gnt_nvals > 0)
-                    LG_TRY(s_mul_acc(acc, scratch, graph_nt[i]));
+                    LG_TRY(s_mul_acc(acc, scratch, graph_nt[i], s_temp));
                 
                 // RETURN bookkeeping: W[i] == reshape(R_i' * P)
                 GRB_TRY(GrB_eWiseAdd(W[i], GrB_NULL, GrB_NULL, GrB_LOR, W[i], scratch, GrB_NULL));
@@ -266,7 +272,7 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
             GrB_Index w_nvals = 0;
             GRB_TRY(GrB_Matrix_nvals(&w_nvals, W[i]));
             if (w_nvals > 0)
-                LG_TRY(s_mul_acc(acc, W[i], new_edges));
+                LG_TRY(s_mul_acc(acc, W[i], new_edges, s_temp));
 
             GRB_TRY(GxB_Matrix_reshape(new_edges, false, 1, V * V, GrB_NULL));
         }

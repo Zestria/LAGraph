@@ -1,9 +1,9 @@
-#define FREE_MATRIX_ARRAY(array)                                                                   \
+#define FREE_MATRIX_ARRAY(array, len)                                                              \
     {                                                                                              \
         if ((array) != NULL)                                                                       \
         {                                                                                          \
-            for (size_t _k = 0; _k < num_nonterm; ++_k)                                            \
-                GrB_free(&(array)[_k]);                                                            \
+            for (size_t _k = 0; _k < (len); ++_k)                                                  \
+                LAGraph_Free((void **)&(array)[_k], NULL);                                         \
             LAGraph_Free((void **)&(array), NULL);                                                 \
         }                                                                                          \
     }
@@ -19,12 +19,7 @@
         GrB_free(&s_temp);                                                                         \
         GrB_free(&rowvec);                                                                         \
         LAGraph_Free((void **)&term_active, NULL);                                                 \
-        if (term_src != NULL)                                                                      \
-        {                                                                                          \
-            for (size_t _k = 0; _k < (size_t) num_term; ++_k)                                     \
-                LAGraph_Free((void **)&term_src[_k], NULL);                                        \
-            LAGraph_Free((void **)&term_src, NULL);                                                \
-        }                                                                                          \
+        FREE_MATRIX_ARRAY(term_src, num_term);                                                     \
         LAGraph_Free((void **)&term_src_count, NULL);                                              \
         LAGraph_Free((void **)&active, NULL);                                                      \
         LAGraph_Free((void **)&active_idx, NULL);                                                  \
@@ -33,9 +28,9 @@
         GrB_free(&diag_entry);                                                                     \
         GrB_free(&entry_vec);                                                                      \
         GrB_free(&source_mask);                                                                    \
-        FREE_MATRIX_ARRAY(graph_nt);                                                               \
-        FREE_MATRIX_ARRAY(W);                                                                      \
-        FREE_MATRIX_ARRAY(rsm_start);                                                              \
+        FREE_MATRIX_ARRAY(graph_nt, num_nonterm);                                                  \
+        FREE_MATRIX_ARRAY(W, num_nonterm);                                                         \
+        FREE_MATRIX_ARRAY(rsm_start, num_nonterm);                                                 \
     }
 
 #define LG_FREE_ALL                                                                                \
@@ -215,7 +210,7 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
 
         LG_TRY(LAGraph_Malloc((void **) &term_src, num_term, sizeof(GrB_Index *), msg));
         for (size_t i = 0; i < num_term; ++i)
-            term_src[i] = NULL;
+            term_src[i] = GrB_NULL;
 
         LG_TRY(LAGraph_Malloc((void **) &term_src_count, num_term, sizeof(size_t), msg));
         for (size_t i = 0; i < num_term; ++i)

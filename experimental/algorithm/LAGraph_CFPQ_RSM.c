@@ -33,14 +33,15 @@
         LAGraph_Free((void **)&term_src_count, NULL);                                              \
         LAGraph_Free((void **)&active, NULL);                                                      \
         LAGraph_Free((void **)&active_idx, NULL);                                                  \
-        LAGraph_Free((void **)&active_vals, NULL);                                                 \
         GrB_free(&new_edges);                                                                      \
-        GrB_free(&diag_entry);                                                                     \
         GrB_free(&entry_vec);                                                                      \
         GrB_free(&source_mask);                                                                    \
+        LAGraph_Free((void **)&call_i, NULL);                                                      \
+        LAGraph_Free((void **)&call_j, NULL);                                                      \
+        LAGraph_Free((void **)&call_x, NULL);                                                      \
+        LAGraph_Free((void **)&extract_idx, NULL);                                                 \
         FREE_GRB_MATRIX_ARRAY(graph_nt, num_nonterm);                                              \
         FREE_GRB_MATRIX_ARRAY(W, num_nonterm);                                                     \
-        FREE_GRB_MATRIX_ARRAY(rsm_start, num_nonterm);                                             \
     }
 
 #define LG_FREE_ALL                                                                                \
@@ -82,7 +83,7 @@ static inline bool s_mul_exceeds(GrB_Index a, GrB_Index b, GrB_Index limit)
 // T must be Q x VV on entry; its content is overwritten.
 static GrB_Info s_shift(GrB_Matrix T, GrB_Matrix A, GrB_Matrix M, GrB_Index Q, GrB_Index V)
 {
-    H_TRY(GrB_mxm(T, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, A, M, GrB_DESC_T0));
+    H_TRY(GrB_mxm(T, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL, A, M, GrB_DESC_T0));
     H_TRY(GxB_Matrix_reshape(T, false, Q * V, V, GrB_NULL));
     return GrB_SUCCESS;
 }
@@ -95,12 +96,28 @@ static GrB_Info s_unshift(GrB_Matrix T, GrB_Index Q, GrB_Index V)
     return GrB_SUCCESS;
 }
 
-// C |= A * B, using one reused QV x V product temporary.
-static GrB_Info s_mul_acc(GrB_Matrix C, GrB_Matrix A, GrB_Matrix B, GrB_Matrix T)
+// C |= A * B, using one reused QV x V product temporary.  The first nonempty
+// product swaps into C instead of being unioned; later products use the union.
+static GrB_Info s_mul_acc(GrB_Matrix *C, GrB_Matrix *T, GrB_Matrix A, GrB_Matrix B,
+                          bool *acc_empty)
 {
-    H_TRY(GrB_Matrix_clear(T));
-    H_TRY(GrB_mxm(T, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, A, B, GrB_NULL));
-    H_TRY(GrB_eWiseAdd(C, GrB_NULL, GrB_NULL, GrB_LOR, C, T, GrB_NULL));
+    H_TRY(GrB_mxm(*T, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL, A, B, GrB_NULL));
+
+    GrB_Index tn = 0;
+    H_TRY(GrB_Matrix_nvals(&tn, *T));
+    if (tn == 0)
+        return GrB_SUCCESS;
+
+    if (*acc_empty)
+    {
+        GrB_Matrix swap = *C;
+        *C = *T;
+        *T = swap;
+        *acc_empty = false;
+        return GrB_SUCCESS;
+    }
+
+    H_TRY(GrB_eWiseAdd(*C, GrB_NULL, GrB_NULL, GrB_LOR, *C, *T, GrB_NULL));
     return GrB_SUCCESS;
 }
 
@@ -127,19 +144,27 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
     GrB_Matrix M = GrB_NULL;
     GrB_Matrix P = GrB_NULL;
     GrB_Matrix acc = GrB_NULL;
+    bool acc_empty = true;
     GrB_Matrix M_call = GrB_NULL;
     GrB_Matrix M_new = GrB_NULL;
     GrB_Matrix scratch = GrB_NULL;
     GrB_Matrix s_temp = GrB_NULL; // QV x V product scratch for s_mul_acc
     GrB_Matrix new_edges = GrB_NULL;
-    GrB_Matrix diag_entry = GrB_NULL;
     GrB_Vector entry_vec = GrB_NULL;
     GrB_Vector source_mask = GrB_NULL;
     GrB_Vector rowvec = GrB_NULL; // length-Q row activity of M
 
+    // reusable call-tuple buffers for the direct flat-layout M_call build
+    GrB_Index *call_i = NULL;
+    GrB_Index *call_j = NULL;
+    bool *call_x = NULL;
+    GrB_Index call_count = 0;
+    GrB_Index call_cap = 0;
+    GrB_Index *extract_idx = NULL;
+    GrB_Index extract_cap = 0;
+
     GrB_Matrix *graph_nt = NULL;
     GrB_Matrix *W = NULL;         // QV x V, W[i] = (rsm_nonterm[i])^T * P
-    GrB_Matrix *rsm_start = NULL; // Q x 1, rsm_start[S][i] = true, iff start_states[S] = i
     GrB_Index num_term = 0;
     GrB_Index num_nonterm = 0;
 
@@ -148,7 +173,6 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
     size_t *term_src_count = NULL;
     bool *active = NULL;
     GrB_Index *active_idx = NULL;
-    bool *active_vals = NULL;
 
     LG_ASSERT(reachable != NULL, GrB_NULL_POINTER);
     *reachable = GrB_NULL;
@@ -193,6 +217,7 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
     // kernel actually reads (all called boxes plus the start box).
     LG_ASSERT_MSG(start_states[start_nonterm] < Q, GrB_INVALID_INDEX,
                   "start state of the start box out of range");
+    // The valid start state also guarantees Q > 0 for all subsequent work.
     for (size_t i = 0; i < num_nonterm; ++i)
     {
         if (rsm_nonterm[i] != GrB_NULL)
@@ -249,7 +274,6 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
 
     LG_TRY(LAGraph_Calloc((void **)&graph_nt, num_nonterm, sizeof(GrB_Matrix), msg));
     LG_TRY(LAGraph_Calloc((void **)&W, num_nonterm, sizeof(GrB_Matrix), msg));
-    LG_TRY(LAGraph_Calloc((void **)&rsm_start, num_nonterm, sizeof(GrB_Matrix), msg));
 
     for (size_t i = 0; i < num_nonterm; ++i)
     {
@@ -258,8 +282,6 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
             continue;
 
         GRB_TRY(GrB_Matrix_new(&W[i], GrB_BOOL, Q * V, V));
-        GRB_TRY(GrB_Matrix_new(&rsm_start[i], GrB_BOOL, Q, 1));
-        GRB_TRY(GrB_Matrix_setElement_BOOL(rsm_start[i], true, start_states[i], 0));
     }
 
     // allocate working matrices
@@ -269,7 +291,6 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
     GRB_TRY(GrB_Matrix_new(&scratch, GrB_BOOL, Q, V * V));
     GRB_TRY(GrB_Matrix_new(&s_temp, GrB_BOOL, Q * V, V));
     GRB_TRY(GrB_Matrix_new(&new_edges, GrB_BOOL, 1, V * V));
-    // there is no need to create matrix for diag_entry
     GRB_TRY(GrB_Vector_new(&entry_vec, GrB_BOOL, V));
     GRB_TRY(GrB_Vector_new(&source_mask, GrB_BOOL, V));
 
@@ -292,21 +313,14 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
 
             term_active[i] = true;
             LG_TRY(LAGraph_Malloc((void **) &term_src[i], rn, sizeof(GrB_Index), msg));
-            GrB_Index rn2 = rn;
-            GRB_TRY(GrB_Matrix_extractTuples_BOOL(term_src[i], NULL, NULL, &rn2, rsm_term[i]));
-            term_src_count[i] = (size_t) rn2;
+            GRB_TRY(GrB_Matrix_extractTuples_BOOL(term_src[i], NULL, NULL, &rn, rsm_term[i]));
+            term_src_count[i] = (size_t) rn;
         }
     }
 
-    if (Q > 0)
-    {
-        GRB_TRY(GrB_Vector_new(&rowvec, GrB_BOOL, Q));
-        LG_TRY(LAGraph_Malloc((void **) &active, Q, sizeof(bool), msg));
-        LG_TRY(LAGraph_Malloc((void **) &active_idx, Q, sizeof(GrB_Index), msg));
-        LG_TRY(LAGraph_Malloc((void **) &active_vals, Q, sizeof(bool), msg));
-        for (GrB_Index i = 0; i < Q; ++i)
-            active[i] = false;
-    }
+    GRB_TRY(GrB_Vector_new(&rowvec, GrB_BOOL, Q));
+    LG_TRY(LAGraph_Malloc((void **) &active, Q, sizeof(bool), msg));
+    LG_TRY(LAGraph_Malloc((void **) &active_idx, Q, sizeof(GrB_Index), msg));
 
     // each source s starts a call to the start nonterminal at (s, s)
     GrB_Index start_state = start_states[start_nonterm];
@@ -323,20 +337,14 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
     while (m_nvals > 0)
     {
         // mark rows of M that currently contain any true entry.
-        if (Q > 0)
-        {
-            GRB_TRY(GrB_Vector_clear(rowvec));
-            GRB_TRY(GrB_reduce(rowvec, GrB_NULL, GrB_NULL, GrB_LOR_MONOID_BOOL, M, GrB_NULL));
-            GrB_Index nactive = 0;
-            GRB_TRY(GrB_Vector_nvals(&nactive, rowvec));
-            GrB_Index nactive2 = nactive;
-            GRB_TRY(GrB_Vector_extractTuples_BOOL(active_idx, active_vals, &nactive2, rowvec));
-            memset(active, 0, (size_t) Q * sizeof(bool));
-            for (GrB_Index k = 0; k < nactive2; ++k)
-                active[active_idx[k]] = true;
-        }
+        GRB_TRY(GrB_reduce(rowvec, GrB_NULL, GrB_NULL, GrB_LOR_MONOID_BOOL, M, GrB_NULL));
+        GrB_Index nactive = Q;
+        GRB_TRY(GrB_Vector_extractTuples_BOOL(active_idx, NULL, &nactive, rowvec));
+        memset(active, 0, (size_t) Q * sizeof(bool));
+        for (GrB_Index k = 0; k < nactive; ++k)
+            active[active_idx[k]] = true;
 
-        // Phase 1: terminal transitions.  T = A_i^T * M is nonempty only if
+        // Phase 1: terminal transitions. T = A_i^T * M is nonempty only if
         // some source state of A_i is an active row of M, so whole chains can
         // be skipped before the shift.
         for (size_t i = 0; i < num_term; ++i)
@@ -357,15 +365,13 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
                 continue;
 
             LG_TRY(s_shift(scratch, rsm_term[i], M, Q, V));
-            GrB_Index tn = 0;
-            GRB_TRY(GrB_Matrix_nvals(&tn, scratch));
-            if (tn > 0)
-                LG_TRY(s_mul_acc(acc, scratch, graph_term[i], s_temp));
+            LG_TRY(s_mul_acc(&acc, &s_temp, scratch, graph_term[i], &acc_empty));
             LG_TRY(s_unshift(scratch, Q, V));
         }
 
         // Phases 2+3: nonterminal transitions and calls
         GRB_TRY(GrB_Matrix_clear(M_call));
+        call_count = 0;
         for (size_t i = 0; i < num_nonterm; ++i)
         {
             if (rsm_nonterm[i] == GrB_NULL)
@@ -379,25 +385,60 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
             if (x_nvals > 0)
             {
                 // call: every vertex v where X is nonzero enters nonterminal i
-                // at (v, v), in its start state
+                // at (v, v), in its start state.  Collect the tuples and build
+                // M_call once after the loop.
                 GRB_TRY(GrB_reduce(entry_vec, GrB_NULL, GrB_NULL, GrB_LOR_MONOID_BOOL, scratch,
                                    GrB_DESC_T0));
-                GRB_TRY(GrB_Matrix_diag(&diag_entry, entry_vec, 0)); // V x V
-                GRB_TRY(GxB_Matrix_reshape(diag_entry, false, 1, V * V, GrB_NULL));
-                GRB_TRY(GrB_mxm(M_call, GrB_NULL, GrB_LOR, GrB_LOR_LAND_SEMIRING_BOOL,
-                                rsm_start[i], diag_entry, GrB_NULL));
-                GRB_TRY(GrB_free(&diag_entry));
+                GrB_Index entry_nvals = 0;
+                GRB_TRY(GrB_Vector_nvals(&entry_nvals, entry_vec));
+                // A nonempty scratch has at least one active column.
+                if (entry_nvals > extract_cap)
+                {
+                    LG_TRY(LAGraph_Realloc((void **) &extract_idx, (size_t) entry_nvals,
+                                           (size_t) extract_cap, sizeof(GrB_Index), msg));
+                    extract_cap = entry_nvals;
+                }
+                GRB_TRY(GrB_Vector_extractTuples_BOOL(extract_idx, NULL, &entry_nvals,
+                                                      entry_vec));
+
+                if (call_count + entry_nvals > call_cap)
+                {
+                    GrB_Index new_cap = (call_count + entry_nvals) * 2;
+                    LG_TRY(LAGraph_Realloc((void **) &call_i, (size_t) new_cap,
+                                           (size_t) call_cap, sizeof(GrB_Index), msg));
+                    LG_TRY(LAGraph_Realloc((void **) &call_j, (size_t) new_cap,
+                                           (size_t) call_cap, sizeof(GrB_Index), msg));
+                    LG_TRY(LAGraph_Realloc((void **) &call_x, (size_t) new_cap,
+                                           (size_t) call_cap, sizeof(bool), msg));
+                    call_cap = new_cap;
+                }
+
+                for (GrB_Index k = 0; k < entry_nvals; ++k)
+                {
+                    GrB_Index v = extract_idx[k];
+                    call_i[call_count] = start_states[i];
+                    call_j[call_count] = v * V + v;
+                    call_x[call_count] = true;
+                    call_count++;
+                }
 
                 // skip over nonterminal i using the summary edges
                 GrB_Index gnt_nvals = 0;
                 GRB_TRY(GrB_Matrix_nvals(&gnt_nvals, graph_nt[i]));
                 if (gnt_nvals > 0)
-                    LG_TRY(s_mul_acc(acc, scratch, graph_nt[i], s_temp));
+                    LG_TRY(s_mul_acc(&acc, &s_temp, scratch, graph_nt[i], &acc_empty));
                 
                 // RETURN bookkeeping: W[i] == reshape(R_i' * P)
                 GRB_TRY(GrB_eWiseAdd(W[i], GrB_NULL, GrB_NULL, GrB_LOR, W[i], scratch, GrB_NULL));
             }
             LG_TRY(s_unshift(scratch, Q, V));
+        }
+
+        // M_call holds the union of every box's start-state / vertex tuples
+        if (call_count > 0)
+        {
+            GRB_TRY(GrB_Matrix_build_BOOL(M_call, call_i, call_j, call_x, call_count,
+                                          GrB_LOR));
         }
 
         // Phase 4: return transitions
@@ -407,7 +448,7 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
                 continue;
 
             // 1 x Q * Q x VV -> 1 x VV
-            GRB_TRY(GrB_mxm(new_edges, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL,
+            GRB_TRY(GrB_mxm(new_edges, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL,
                             (GrB_Matrix)final_states[i], M, GrB_DESC_T0));
 
             GrB_Index ne_vals = 0;
@@ -441,7 +482,7 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
                 GrB_Index w_nvals = 0;
                 GRB_TRY(GrB_Matrix_nvals(&w_nvals, W[i]));
                 if (w_nvals > 0)
-                    LG_TRY(s_mul_acc(acc, W[i], new_edges, s_temp));
+                    LG_TRY(s_mul_acc(&acc, &s_temp, W[i], new_edges, &acc_empty));
             }
 
             GRB_TRY(GxB_Matrix_reshape(new_edges, false, 1, V * V, GrB_NULL));
@@ -451,6 +492,7 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
         GRB_TRY(GrB_free(&M_new));
         GRB_TRY(GxB_Matrix_reshapeDup(&M_new, acc, false, Q, V * V, GrB_NULL));
         GRB_TRY(GrB_Matrix_clear(acc));
+        acc_empty = true;
         GRB_TRY(GrB_eWiseAdd(M_new, P, GrB_NULL, GrB_LOR, M_new, M_call, GrB_DESC_RSC));
         GRB_TRY(GrB_eWiseAdd(P, GrB_NULL, GrB_NULL, GrB_LOR, P, M_new, GrB_NULL));
 
@@ -463,7 +505,7 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
 
     // reachable(w) = OR_s source_mask(s) & graph_nt[start](s, w)
     GRB_TRY(GrB_Vector_new(reachable, GrB_BOOL, V));
-    GRB_TRY(GrB_mxv(*reachable, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL,
+    GRB_TRY(GrB_mxv(*reachable, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL,
                     graph_nt[start_nonterm], source_mask, GrB_DESC_T0));
 
     LG_FREE_WORK;

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Build CFPQ RSM variants and compare them on the same inputs (DS-01-R2).
 
-The baseline is normally the frozen corrected reference
-(experimental/algorithm/cfpq_rsm_lab/variants/correctness_r2.c). A variant is one
-of:
+The baseline is normally the frozen copy of the production source
+(experimental/algorithm/cfpq_rsm_lab/variants/baseline.c). A variant is one of:
 
   * patches/<part>.patch applied in order, e.g. "A+B" applies A.patch and
     then B.patch to a temporary copy of the baseline;
@@ -32,7 +31,10 @@ directory is rejected otherwise.  Every profile record carries a durable tag
 (case, source size, seed) and, after annotation, chunk/warm-up/round columns.
 
 --hot is cfg_bench's per-invocation warm-up: one unmeasured run of each case
-before the measured -r 1 run. Warm-up is never a measured sample.
+before the measured -r 1 run. Warm-up is never a measured sample. In timing
+mode --hot-rounds selects how many warm-ups are used: 1 (default) appends --hot
+only to round 0's invocation, so each variant/workload/chunk gets one unmeasured
+warm-up plus the measured rounds; 0 appends it never.
 """
 
 from __future__ import annotations
@@ -52,13 +54,13 @@ from pathlib import Path
 
 LAB_DIR = Path(__file__).resolve().parent
 LAGRAPH_DIR = LAB_DIR.parents[2]
-DEFAULT_BASELINE = LAB_DIR / "variants" / "correctness_r2.c"
+DEFAULT_BASELINE = LAB_DIR / "variants" / "baseline.c"
 DEFAULT_CFG_BENCH_DIR = Path.home() / "repo" / "CFG_bench"
 DEFAULT_CONFIG = LAB_DIR / "configs" / "lab.csv"
 
 # entries owned by a run; reused only with --force
-RUN_OWNED = ("summary.csv", "provenance.txt", "inputs.sha256", "raw", "logs", "libs",
-             "profile", "src", "jit-cache", "profile.csv", "profile-calls.csv")
+RUN_OWNED = ("summary.csv", "execution_status.tsv", "provenance.txt", "inputs.sha256", "raw",
+             "logs", "libs", "profile", "src", "jit-cache", "profile.csv", "profile-calls.csv")
 
 PROFILE_REQUIRED_KEYS = (
     "tag", "call", "q", "v", "iters", "setup_s", "activity_s", "phase1_s", "phase2_3_s",
@@ -85,7 +87,7 @@ def parse_args() -> argparse.Namespace:
         default=100,
         help="experiment chunk size; 0 uses all start vertices in normal mode (default: 100)",
     )
-    parser.add_argument("--chunks", type=int, default=1, help="experiment chunks per run (default: 1)")
+    parser.add_argument("--chunks", type=int, default=30, help="experiment chunks per run (default: 30)")
     parser.add_argument("--seed", type=int, default=2026, help="experiment source shuffle seed (default: 2026)")
     parser.add_argument("--out", type=Path, help="output directory (default: build/runs/<timestamp>)")
     parser.add_argument("--force", action="store_true", help="clear run-owned files in a nonempty output directory")
@@ -99,7 +101,34 @@ def parse_args() -> argparse.Namespace:
         default="-O2 -fPIC -shared -std=c11",
         help="flags for variant shared libraries (default: %(default)s)",
     )
-    parser.add_argument("--threads", type=int, default=1, help="OMP_NUM_THREADS for cfg_bench (default: 1)")
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=0,
+        help="OMP thread mode: 0 = unrestricted library/runtime threading (default); "
+             "N > 0 sets OMP_NUM_THREADS=N explicitly",
+    )
+    parser.add_argument(
+        "--hot-rounds",
+        type=int,
+        choices=(0, 1),
+        default=1,
+        help="timing mode: append cfg_bench --hot to round 0 only when 1 (default: 1); "
+             "profile mode always uses its own --hot",
+    )
+    parser.add_argument(
+        "--order",
+        choices=("rotated", "blocked"),
+        default="rotated",
+        help="timing mode schedule: rotated = existing round-major rotation (default); "
+             "blocked = each display completes all rounds before the next display starts",
+    )
+    parser.add_argument(
+        "--keep-going",
+        action="store_true",
+        help="timing mode: record a failed pass and continue with the remaining schedule "
+             "(default: stop on the first failure)",
+    )
     parser.add_argument(
         "--jit-cache",
         type=Path,
@@ -151,8 +180,24 @@ def prepare_output_dir(out: Path, force: bool) -> None:
             path.unlink()
 
 
+def thread_mode_description(threads: int) -> str:
+    if threads == 0:
+        return "unrestricted (OMP_NUM_THREADS and OMP_THREAD_LIMIT unset)"
+    return f"explicit OMP_NUM_THREADS={threads}"
+
+
+def apply_thread_mode(env: dict, threads: int) -> str:
+    """Apply --threads to a child environment; return the recorded mode."""
+    if threads == 0:
+        env.pop("OMP_NUM_THREADS", None)
+        env.pop("OMP_THREAD_LIMIT", None)
+    else:
+        env["OMP_NUM_THREADS"] = str(threads)
+    return thread_mode_description(threads)
+
+
 def run(cmd: list[str], cwd: Path, log_path: Path, what: str, env: dict | None = None,
-        extra_env: dict | None = None) -> None:
+        extra_env: dict | None = None, allow_failure: bool = False) -> int:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     child_env = dict(env if env is not None else os.environ)
     if extra_env:
@@ -166,7 +211,9 @@ def run(cmd: list[str], cwd: Path, log_path: Path, what: str, env: dict | None =
     if result.returncode != 0:
         print(f"{what} failed (exit {result.returncode}), see {log_path}", file=sys.stderr)
         print(log_path.read_text()[-4000:], file=sys.stderr)
-        raise SystemExit(1)
+        if not allow_failure:
+            raise SystemExit(1)
+    return result.returncode
 
 
 def find_lagraphx_dir(lagraph: Path, override: Path | None) -> Path:
@@ -361,6 +408,28 @@ def expected_keys(pairs: list[tuple[str, str]], args: argparse.Namespace) -> lis
     return keys
 
 
+def build_timing_schedule(displays: list[tuple[str, str]], rounds: int,
+                          order: str) -> list[tuple[int, str, str]]:
+    """Return (round_index, display, spec) timing jobs in the selected order."""
+    jobs: list[tuple[int, str, str]] = []
+    if order == "rotated":
+        # existing round-major rotation: round 0 starts at the first display,
+        # then each round starts one display later in the supplied order
+        for round_index in range(rounds):
+            offset = round_index % len(displays)
+            ordered = displays[offset:] + displays[:offset]
+            for display, spec in ordered:
+                jobs.append((round_index, display, spec))
+    elif order == "blocked":
+        # display-major: all measured rounds of one display before the next
+        for display, spec in displays:
+            for round_index in range(rounds):
+                jobs.append((round_index, display, spec))
+    else:
+        raise SystemExit(f"unknown timing order: {order}")
+    return jobs
+
+
 def add_result_row(results: dict, display: str, key: tuple, round_id: int, row: dict) -> None:
     rounds = results.setdefault(display, {}).setdefault(key, {})
     if round_id in rounds:
@@ -517,7 +586,10 @@ def write_provenance(args: argparse.Namespace, out: Path, cfg_bench: Path, confi
         lines.append(f"profile_header: {header} sha256={sha256_file(header)}")
     lines.append(f"compiler: {cxx_ident(sh([args.compiler, '--version'], args.lagraph.resolve()))}")
     lines.append(f"cflags: {args.cflags}")
-    lines.append(f"threads: OMP_NUM_THREADS={args.threads}")
+    lines.append(f"threads: {thread_mode_description(args.threads)}")
+    lines.append(f"hot_rounds: {args.hot_rounds} (timing mode appends --hot only to round 0 when 1)")
+    lines.append(f"order: {args.order}")
+    lines.append(f"keep_going: {int(args.keep_going)}")
     lines.append(f"machine: {sh(['uname', '-srm'], args.lagraph.resolve())}")
     lines.append(f"nproc: {os.cpu_count()}")
     cpu_model = ""
@@ -532,8 +604,9 @@ def write_provenance(args: argparse.Namespace, out: Path, cfg_bench: Path, confi
     jit_cache = args.jit_cache if args.jit_cache is not None else out / "jit-cache"
     lines.append(f"jit_cache: {jit_cache}")
     lines.append("jit_note: GRAPHBLAS_CACHE_PATH is set to the run-local cache; the JIT control is left "
-                 "at the library default (ON); cfg_bench --hot performs one unmeasured warm-up call per "
-                 "case before the measured -r 1 call")
+                 "at the library default (ON); in timing mode cfg_bench --hot is used only on round 0 "
+                 "when --hot-rounds=1, so each variant/workload/chunk has one unmeasured warm-up "
+                 "plus the measured rounds")
     lines.append("")
     lines.append("# input manifest (sha256:size:mtime, resolved under the CFG_bench checkout)")
     input_lines = []
@@ -616,7 +689,7 @@ def run_profile(args: argparse.Namespace, cfg_bench: Path, out: Path, pairs: lis
         raise SystemExit("--profile requires --source-size > 0")
     size = args.source_size
     env = dict(os.environ)
-    env["OMP_NUM_THREADS"] = str(args.threads)
+    apply_thread_mode(env, args.threads)
     env["GRAPHBLAS_CACHE_PATH"] = str(args.jit_cache if args.jit_cache is not None else out / "jit-cache")
     (out / "profile").mkdir(parents=True, exist_ok=True)
     (out / "profile" / "configs").mkdir(parents=True, exist_ok=True)
@@ -767,86 +840,64 @@ def run_profile(args: argparse.Namespace, cfg_bench: Path, out: Path, pairs: lis
     return 1 if failed else 0
 
 
-def main() -> int:
-    args = parse_args()
-    args.baseline = args.baseline.resolve()
-    args.config = args.config.resolve()
-    args.cfg_bench_dir = args.cfg_bench_dir.resolve()
-    if args.rounds <= 0:
-        raise SystemExit("--rounds must be positive")
-    if args.source_size < 0 or args.chunks <= 0:
-        raise SystemExit("--source-size must be >= 0 and --chunks must be positive")
-    if not args.baseline.is_file():
-        raise SystemExit(f"baseline not found: {args.baseline}")
+def collect_timing_pass(csv_path: Path, display: str, round_index: int,
+                        results: dict, expected_count: int | None) -> tuple[str, str]:
+    """Read one successful child's CSV and register it; return (outcome, detail)."""
+    try:
+        rows = read_rows(csv_path)
+    except (OSError, csv.Error, UnicodeDecodeError) as exc:
+        outcome = "missing_csv" if not csv_path.exists() else "malformed_csv"
+        return outcome, f"{csv_path}: {exc}"
+    if not rows:
+        return "empty_csv", f"no result rows in {csv_path}"
+    if expected_count is not None and len(rows) != expected_count:
+        return "incomplete_csv", f"{csv_path}: {len(rows)} rows, expected {expected_count}"
+    parsed: list[tuple[tuple, dict]] = []
+    seen: set[tuple] = set()
+    for row in rows:
+        try:
+            key = (row["graph"], row["cnf"], row["source_size"], row["chunk"])
+        except KeyError as exc:
+            return "malformed_csv", f"{csv_path}: missing column {exc}"
+        if key in seen:
+            return "malformed_csv", f"duplicate case {key} in {csv_path}"
+        seen.add(key)
+        parsed.append((key, row))
+    try:
+        for key, row in parsed:
+            add_result_row(results, display, key, round_index, row)
+    except SystemExit as exc:
+        return "malformed_csv", str(exc)
+    return "ok", ""
 
-    if args.out is None:
-        stamp = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d_%H-%M-%S")
-        args.out = LAB_DIR / "build" / "runs" / stamp
-    args.out = args.out.resolve()
-    prepare_output_dir(args.out, args.force)
 
-    input_paths = check_config(args.config, args.cfg_bench_dir)
-    pairs = read_config_pairs(args.config)
-    cfg_bench = build_cfg_bench(args)
-
-    sources: dict[str, Path] = {}
-    libraries: dict[str, Path] = {}
-    if args.profile:
-        profile_source = args.out / "profile" / "src" / "correctness_profile.c"
-        profile_source.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(
-            [sys.executable, str(LAB_DIR / "tests" / "make_profile_variant.py"), str(args.baseline),
-             str(profile_source)],
-            check=True,
-        )
-        sources["baseline"] = variant_source("baseline", args, args.out)
-        libraries["baseline"] = build_variant("baseline", sources["baseline"], args, args.out)
-        sources["profile"] = profile_source
-        libraries["profile"] = build_variant("profile", profile_source, args, args.out,
-                                             extra_cflags="-DCFPQ_RSM_PROFILE")
-        write_provenance(args, args.out, cfg_bench, args.config, libraries, sources, input_paths)
-        # the reference for profile acceptance is the uninstrumented baseline build
-        profile_libraries = {"reference": libraries["baseline"], "profile": libraries["profile"]}
-        return run_profile(args, cfg_bench, args.out, pairs, profile_libraries)
-
-    specs = [spec.strip() for spec in args.variants.split(",") if spec.strip()]
-    if not specs:
-        raise SystemExit("--variants is empty")
-    counts: dict[str, int] = {}
-    displays: list[tuple[str, str]] = []
-    for spec in specs:
-        counts[spec] = counts.get(spec, 0) + 1
-        display = spec if counts[spec] == 1 else f"{spec}#{counts[spec]}"
-        displays.append((display, spec))
-
-    for display, spec in displays:
-        if spec not in sources:
-            sources[spec] = variant_source(spec, args, args.out)
-            libraries[spec] = build_variant(spec, sources[spec], args, args.out)
-        print(f"variant {display}: {libraries[spec]}", flush=True)
+def run_timing(args: argparse.Namespace, cfg_bench: Path, pairs: list[tuple[str, str]],
+               libraries: dict[str, Path], displays: list[tuple[str, str]]) -> int:
+    """Execute the selected timing schedule and write the shared-run summary."""
+    out = args.out
+    keys = expected_keys(pairs, args)
+    env = dict(os.environ)
+    apply_thread_mode(env, args.threads)
+    env["GRAPHBLAS_CACHE_PATH"] = str(args.jit_cache if args.jit_cache is not None else out / "jit-cache")
+    (out / "jit-cache").mkdir(parents=True, exist_ok=True)
 
     baseline_display = next((display for display, spec in displays if spec == args.baseline_variant), None)
     if baseline_display is None:
         raise SystemExit(f"baseline variant '{args.baseline_variant}' is not in --variants")
 
-    write_provenance(args, args.out, cfg_bench, args.config, libraries, sources, input_paths)
-    if args.provenance_only:
-        print(f"provenance: {args.out / 'provenance.txt'}")
-        return 0
-
-    keys = expected_keys(pairs, args)
-    env = dict(os.environ)
-    env["OMP_NUM_THREADS"] = str(args.threads)
-    env["GRAPHBLAS_CACHE_PATH"] = str(args.jit_cache if args.jit_cache is not None else args.out / "jit-cache")
-    (args.out / "jit-cache").mkdir(parents=True, exist_ok=True)
-
+    jobs = build_timing_schedule(displays, args.rounds, args.order)
     results: dict[str, dict[tuple, dict[int, dict]]] = {display: {} for display, _ in displays}
-    for round_index in range(args.rounds):
-        offset = round_index % len(displays)
-        order = displays[offset:] + displays[:offset]
-        for display, spec in order:
-            csv_path = args.out / "raw" / safe_name(display) / f"round{round_index}.csv"
+    execution_failed = False
+    status_path = out / "execution_status.tsv"
+    with open(status_path, "w", newline="") as status_file:
+        status_writer = csv.writer(status_file, delimiter="\t", lineterminator="\n")
+        status_writer.writerow(
+            ["display", "spec", "round", "start", "finish", "exit_code", "outcome", "log"])
+        status_file.flush()
+        for round_index, display, spec in jobs:
+            csv_path = out / "raw" / safe_name(display) / f"round{round_index}.csv"
             csv_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path = out / "logs" / safe_name(display) / f"round{round_index}.log"
             cmd = [
                 str(cfg_bench),
                 "-c",
@@ -857,10 +908,13 @@ def main() -> int:
                 str(libraries[spec]),
                 "-r",
                 "1",
-                "--hot",
                 "--results-file",
                 str(csv_path),
             ]
+            # one unmeasured warm-up per display: only that display's round 0
+            # may pass --hot
+            if args.hot_rounds == 1 and round_index == 0:
+                cmd.append("--hot")
             if args.source_size > 0:
                 cmd += [
                     "--experiment",
@@ -873,29 +927,40 @@ def main() -> int:
                 ]
             else:
                 cmd += ["--use-start-nodes"]
-            run(cmd, cwd=args.cfg_bench_dir,
-                log_path=args.out / "logs" / safe_name(display) / f"round{round_index}.log",
-                what=f"cfg_bench {display} round {round_index}", env=env)
-            rows = read_rows(csv_path)
-            if not rows:
-                raise SystemExit(f"no result rows in {csv_path}")
-            seen: set[tuple] = set()
-            for row in rows:
-                key = (row["graph"], row["cnf"], row["source_size"], row["chunk"])
-                if key in seen:
-                    raise SystemExit(f"duplicate case {key} in {csv_path}")
-                seen.add(key)
-                add_result_row(results, display, key, round_index, row)
+            start = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+            rc = run(cmd, cwd=args.cfg_bench_dir, log_path=log_path,
+                     what=f"cfg_bench {display} round {round_index}", env=env,
+                     allow_failure=args.keep_going)
+            finish = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+            if rc != 0:
+                outcome, detail = "child_failed", f"child exited {rc}"
+            else:
+                expected_count = len(keys) if keys is not None else None
+                outcome, detail = collect_timing_pass(
+                    csv_path, display, round_index, results, expected_count)
+            status_writer.writerow(
+                [display, spec, round_index, start, finish, rc, outcome, log_path])
+            status_file.flush()
+            if outcome != "ok":
+                execution_failed = True
+                message = f"{display} round {round_index}: {outcome} ({detail})"
+                print(message, file=sys.stderr)
+                if not args.keep_going:
+                    raise SystemExit(message)
 
     if keys is None:
-        base_keys = set(results[baseline_display])
+        base_keys = set(results.get(baseline_display, {}))
         expected_pairs = set(pairs)
         got_pairs = {(key[0], key[1]) for key in base_keys}
         if got_pairs != expected_pairs:
-            raise SystemExit(
+            message = (
                 f"case set mismatch: missing {sorted(expected_pairs - got_pairs)}, "
                 f"unexpected {sorted(got_pairs - expected_pairs)}"
             )
+            if not args.keep_going:
+                raise SystemExit(message)
+            print(message, file=sys.stderr)
+            execution_failed = True
         keys = sorted(base_keys)
     problems, stats = accept_rows(results, list(keys), args.rounds, baseline_display)
 
@@ -904,14 +969,19 @@ def main() -> int:
     if len(base_copies) > 1:
         ratios = []
         for key in keys:
-            base_times = [float(stats[(base_copies[0], key)]["times"][i])
-                          for i in range(len(stats[(base_copies[0], key)]["times"]))
-                          if i < len(stats[(base_copies[0], key)]["times"])]
+            first = stats.get((base_copies[0], key))
+            if first is None or not first["times"]:
+                continue
+            first_median = median(first["times"])
+            if first_median <= 0:
+                continue
             for other in base_copies[1:]:
-                other_times = stats[(other, key)]["times"]
-                a = stats[(base_copies[0], key)]["times"]
-                if a and other_times and median(a) > 0:
-                    ratios.append(median(other_times) / median(a))
+                other_stat = stats.get((other, key))
+                if other_stat is None or not other_stat["times"]:
+                    continue
+                other_median = median(other_stat["times"])
+                if other_median > 0:
+                    ratios.append(other_median / first_median)
         noise = max(ratios) - min(ratios) if len(ratios) > 1 else 0.0
 
     summary_rows: list[dict] = []
@@ -973,7 +1043,7 @@ def main() -> int:
             "statuses": statuses,
         }
 
-    summary_path = args.out / "summary.csv"
+    summary_path = out / "summary.csv"
     fieldnames = [
         "variant", "graph", "cnf", "source_size", "chunk", "rounds_seen", "n_runs", "ref_median_s",
         "median_s", "iqr_s", "min_s", "max_s", "ratio", "result", "result_hash", "count_ok", "hash_ok",
@@ -1000,18 +1070,92 @@ def main() -> int:
               f"{stats_v['median_ms']:10.3f} {stats_v['memory_mb']:8.1f}  {status}")
     if len(base_copies) > 1:
         print(f"\nduplicate-baseline variation (max/min ratio spread over cases): {noise:.3f}")
+    print(f"order:    {args.order}")
     print()
     print(f"summary:  {summary_path}")
-    print(f"raw:      {args.out / 'raw'}")
-    print(f"logs:     {args.out / 'logs'}")
-    print(f"provenance: {args.out / 'provenance.txt'}")
+    print(f"execution status: {status_path}")
+    print(f"raw:      {out / 'raw'}")
+    print(f"logs:     {out / 'logs'}")
+    print(f"provenance: {out / 'provenance.txt'}")
     if problems:
         print(f"\nACCEPTANCE FAILURES ({len(problems)}):", file=sys.stderr)
         for problem in problems[:200]:
             print(f"  {problem}", file=sys.stderr)
         if len(problems) > 200:
             print(f"  ... and {len(problems) - 200} more", file=sys.stderr)
-    return 1 if (failed or problems) else 0
+    return 1 if (failed or problems or execution_failed) else 0
+
+
+def main() -> int:
+    args = parse_args()
+    args.baseline = args.baseline.resolve()
+    args.config = args.config.resolve()
+    args.cfg_bench_dir = args.cfg_bench_dir.resolve()
+    if args.rounds <= 0:
+        raise SystemExit("--rounds must be positive")
+    if args.threads < 0:
+        raise SystemExit("--threads must be >= 0")
+    if args.source_size < 0 or args.chunks <= 0:
+        raise SystemExit("--source-size must be >= 0 and --chunks must be positive")
+    if not args.baseline.is_file():
+        raise SystemExit(f"baseline not found: {args.baseline}")
+
+    if args.out is None:
+        stamp = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d_%H-%M-%S")
+        args.out = LAB_DIR / "build" / "runs" / stamp
+    args.out = args.out.resolve()
+    prepare_output_dir(args.out, args.force)
+
+    input_paths = check_config(args.config, args.cfg_bench_dir)
+    pairs = read_config_pairs(args.config)
+    cfg_bench = build_cfg_bench(args)
+
+    sources: dict[str, Path] = {}
+    libraries: dict[str, Path] = {}
+    if args.profile:
+        profile_source = args.out / "profile" / "src" / "correctness_profile.c"
+        profile_source.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            [sys.executable, str(LAB_DIR / "tests" / "make_profile_variant.py"), str(args.baseline),
+             str(profile_source)],
+            check=True,
+        )
+        sources["baseline"] = variant_source("baseline", args, args.out)
+        libraries["baseline"] = build_variant("baseline", sources["baseline"], args, args.out)
+        sources["profile"] = profile_source
+        libraries["profile"] = build_variant("profile", profile_source, args, args.out,
+                                             extra_cflags="-DCFPQ_RSM_PROFILE")
+        write_provenance(args, args.out, cfg_bench, args.config, libraries, sources, input_paths)
+        # the reference for profile acceptance is the uninstrumented baseline build
+        profile_libraries = {"reference": libraries["baseline"], "profile": libraries["profile"]}
+        return run_profile(args, cfg_bench, args.out, pairs, profile_libraries)
+
+    specs = [spec.strip() for spec in args.variants.split(",") if spec.strip()]
+    if not specs:
+        raise SystemExit("--variants is empty")
+    counts: dict[str, int] = {}
+    displays: list[tuple[str, str]] = []
+    for spec in specs:
+        counts[spec] = counts.get(spec, 0) + 1
+        display = spec if counts[spec] == 1 else f"{spec}#{counts[spec]}"
+        displays.append((display, spec))
+
+    for display, spec in displays:
+        if spec not in sources:
+            sources[spec] = variant_source(spec, args, args.out)
+            libraries[spec] = build_variant(spec, sources[spec], args, args.out)
+        print(f"variant {display}: {libraries[spec]}", flush=True)
+
+    baseline_display = next((display for display, spec in displays if spec == args.baseline_variant), None)
+    if baseline_display is None:
+        raise SystemExit(f"baseline variant '{args.baseline_variant}' is not in --variants")
+
+    write_provenance(args, args.out, cfg_bench, args.config, libraries, sources, input_paths)
+    if args.provenance_only:
+        print(f"provenance: {args.out / 'provenance.txt'}")
+        return 0
+
+    return run_timing(args, cfg_bench, pairs, libraries, displays)
 
 
 if __name__ == "__main__":

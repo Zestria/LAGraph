@@ -2575,9 +2575,10 @@ static void usage(const char *argv0)
 {
     fprintf(stderr,
             "usage: %s [--no-random] [--cases N] [--seed S] [--verbose]\n"
+            "       %s --smoke\n"
             "       %s --alloc-sweep [--max-budget N]\n"
             "       %s --alloc-case=N\n",
-            argv0, argv0, argv0);
+            argv0, argv0, argv0, argv0);
 }
 
 static void test_list(void)
@@ -2602,6 +2603,7 @@ int main(int argc, char **argv)
     int cases = 200;
     uint64_t seed = 2026;
     bool run_random = true;
+    bool smoke = false;
     int max_budget = 4096;
     bool alloc_sweep_mode = false;
     const char *alloc_case_arg = NULL;
@@ -2611,6 +2613,8 @@ int main(int argc, char **argv)
         const char *a = argv[k];
         if (strcmp(a, "--no-random") == 0)
             run_random = false;
+        else if (strcmp(a, "--smoke") == 0)
+            smoke = true;
         else if (strcmp(a, "--verbose") == 0)
             g_verbose = true;
         else if (strcmp(a, "--cases") == 0 && k + 1 < argc)
@@ -2658,11 +2662,24 @@ int main(int argc, char **argv)
     }
     freeze_graphblas_environment();
 
-    printf("DS-00 correctness harness: deterministic regressions\n");
-    fflush(stdout);
-    test_list();
+    if (smoke)
+    {
+        // --smoke: only the three existing functional regressions used for the
+        // R5 variant checks; no randomized or other suites.
+        printf("DS-00 correctness harness: smoke (single terminal, empty/zero, recursion)\n");
+        fflush(stdout);
+        test_single_terminal();
+        test_empty_and_zero();
+        test_recursion();
+    }
+    else
+    {
+        printf("DS-00 correctness harness: deterministic regressions\n");
+        fflush(stdout);
+        test_list();
+    }
 
-    if (run_random)
+    if (run_random && !smoke)
     {
         printf("DS-00 correctness harness: %d randomized cases, base seed %llu\n", cases,
                (unsigned long long)seed);
@@ -2674,7 +2691,8 @@ int main(int argc, char **argv)
 
     printf("\nchecks=%d failures=%d\n", g_checks, g_failures);
     if (g_failures == 0)
-        printf("PASS: deterministic regressions and randomized oracle cases\n");
+        printf("PASS: %s\n", smoke ? "--smoke checks"
+                                   : "deterministic regressions and randomized oracle cases");
     else
         printf("FAIL: %d check(s) failed\n", g_failures);
     return g_failures == 0 ? 0 : 1;

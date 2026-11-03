@@ -33,7 +33,6 @@
         LAGraph_Free((void **)&term_src_count, NULL);                                              \
         LAGraph_Free((void **)&active, NULL);                                                      \
         LAGraph_Free((void **)&active_idx, NULL);                                                  \
-        LAGraph_Free((void **)&active_vals, NULL);                                                 \
         GrB_free(&new_edges);                                                                      \
         GrB_free(&entry_vec);                                                                      \
         GrB_free(&source_mask);                                                                    \
@@ -102,7 +101,6 @@ static GrB_Info s_unshift(GrB_Matrix T, GrB_Index Q, GrB_Index V)
 static GrB_Info s_mul_acc(GrB_Matrix *C, GrB_Matrix *T, GrB_Matrix A, GrB_Matrix B,
                           bool *acc_empty)
 {
-    H_TRY(GrB_Matrix_clear(*T));
     H_TRY(GrB_mxm(*T, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL, A, B, GrB_NULL));
 
     GrB_Index tn = 0;
@@ -175,7 +173,6 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
     size_t *term_src_count = NULL;
     bool *active = NULL;
     GrB_Index *active_idx = NULL;
-    bool *active_vals = NULL;
 
     LG_ASSERT(reachable != NULL, GrB_NULL_POINTER);
     *reachable = GrB_NULL;
@@ -220,6 +217,7 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
     // kernel actually reads (all called boxes plus the start box).
     LG_ASSERT_MSG(start_states[start_nonterm] < Q, GrB_INVALID_INDEX,
                   "start state of the start box out of range");
+    // The valid start state also guarantees Q > 0 for all subsequent work.
     for (size_t i = 0; i < num_nonterm; ++i)
     {
         if (rsm_nonterm[i] != GrB_NULL)
@@ -315,21 +313,14 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
 
             term_active[i] = true;
             LG_TRY(LAGraph_Malloc((void **) &term_src[i], rn, sizeof(GrB_Index), msg));
-            GrB_Index rn2 = rn;
-            GRB_TRY(GrB_Matrix_extractTuples_BOOL(term_src[i], NULL, NULL, &rn2, rsm_term[i]));
-            term_src_count[i] = (size_t) rn2;
+            GRB_TRY(GrB_Matrix_extractTuples_BOOL(term_src[i], NULL, NULL, &rn, rsm_term[i]));
+            term_src_count[i] = (size_t) rn;
         }
     }
 
-    if (Q > 0)
-    {
-        GRB_TRY(GrB_Vector_new(&rowvec, GrB_BOOL, Q));
-        LG_TRY(LAGraph_Malloc((void **) &active, Q, sizeof(bool), msg));
-        LG_TRY(LAGraph_Malloc((void **) &active_idx, Q, sizeof(GrB_Index), msg));
-        LG_TRY(LAGraph_Malloc((void **) &active_vals, Q, sizeof(bool), msg));
-        for (GrB_Index i = 0; i < Q; ++i)
-            active[i] = false;
-    }
+    GRB_TRY(GrB_Vector_new(&rowvec, GrB_BOOL, Q));
+    LG_TRY(LAGraph_Malloc((void **) &active, Q, sizeof(bool), msg));
+    LG_TRY(LAGraph_Malloc((void **) &active_idx, Q, sizeof(GrB_Index), msg));
 
     // each source s starts a call to the start nonterminal at (s, s)
     GrB_Index start_state = start_states[start_nonterm];
@@ -346,20 +337,14 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
     while (m_nvals > 0)
     {
         // mark rows of M that currently contain any true entry.
-        if (Q > 0)
-        {
-            GRB_TRY(GrB_Vector_clear(rowvec));
-            GRB_TRY(GrB_reduce(rowvec, GrB_NULL, GrB_NULL, GrB_LOR_MONOID_BOOL, M, GrB_NULL));
-            GrB_Index nactive = 0;
-            GRB_TRY(GrB_Vector_nvals(&nactive, rowvec));
-            GrB_Index nactive2 = nactive;
-            GRB_TRY(GrB_Vector_extractTuples_BOOL(active_idx, active_vals, &nactive2, rowvec));
-            memset(active, 0, (size_t) Q * sizeof(bool));
-            for (GrB_Index k = 0; k < nactive2; ++k)
-                active[active_idx[k]] = true;
-        }
+        GRB_TRY(GrB_reduce(rowvec, GrB_NULL, GrB_NULL, GrB_LOR_MONOID_BOOL, M, GrB_NULL));
+        GrB_Index nactive = Q;
+        GRB_TRY(GrB_Vector_extractTuples_BOOL(active_idx, NULL, &nactive, rowvec));
+        memset(active, 0, (size_t) Q * sizeof(bool));
+        for (GrB_Index k = 0; k < nactive; ++k)
+            active[active_idx[k]] = true;
 
-        // Phase 1: terminal transitions.  T = A_i^T * M is nonempty only if
+        // Phase 1: terminal transitions. T = A_i^T * M is nonempty only if
         // some source state of A_i is an active row of M, so whole chains can
         // be skipped before the shift.
         for (size_t i = 0; i < num_term; ++i)
@@ -380,10 +365,7 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
                 continue;
 
             LG_TRY(s_shift(scratch, rsm_term[i], M, Q, V));
-            GrB_Index tn = 0;
-            GRB_TRY(GrB_Matrix_nvals(&tn, scratch));
-            if (tn > 0)
-                LG_TRY(s_mul_acc(&acc, &s_temp, scratch, graph_term[i], &acc_empty));
+            LG_TRY(s_mul_acc(&acc, &s_temp, scratch, graph_term[i], &acc_empty));
             LG_TRY(s_unshift(scratch, Q, V));
         }
 
@@ -409,38 +391,35 @@ int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *gr
                                    GrB_DESC_T0));
                 GrB_Index entry_nvals = 0;
                 GRB_TRY(GrB_Vector_nvals(&entry_nvals, entry_vec));
-                if (entry_nvals > 0)
+                // A nonempty scratch has at least one active column.
+                if (entry_nvals > extract_cap)
                 {
-                    if (entry_nvals > extract_cap)
-                    {
-                        LG_TRY(LAGraph_Realloc((void **) &extract_idx, (size_t) entry_nvals,
-                                               (size_t) extract_cap, sizeof(GrB_Index), msg));
-                        extract_cap = entry_nvals;
-                    }
-                    GrB_Index entry_nvals2 = entry_nvals;
-                    GRB_TRY(GrB_Vector_extractTuples_BOOL(extract_idx, NULL, &entry_nvals2,
-                                                          entry_vec));
+                    LG_TRY(LAGraph_Realloc((void **) &extract_idx, (size_t) entry_nvals,
+                                           (size_t) extract_cap, sizeof(GrB_Index), msg));
+                    extract_cap = entry_nvals;
+                }
+                GRB_TRY(GrB_Vector_extractTuples_BOOL(extract_idx, NULL, &entry_nvals,
+                                                      entry_vec));
 
-                    if (call_count + entry_nvals2 > call_cap)
-                    {
-                        GrB_Index new_cap = (call_count + entry_nvals2) * 2;
-                        LG_TRY(LAGraph_Realloc((void **) &call_i, (size_t) new_cap,
-                                               (size_t) call_cap, sizeof(GrB_Index), msg));
-                        LG_TRY(LAGraph_Realloc((void **) &call_j, (size_t) new_cap,
-                                               (size_t) call_cap, sizeof(GrB_Index), msg));
-                        LG_TRY(LAGraph_Realloc((void **) &call_x, (size_t) new_cap,
-                                               (size_t) call_cap, sizeof(bool), msg));
-                        call_cap = new_cap;
-                    }
+                if (call_count + entry_nvals > call_cap)
+                {
+                    GrB_Index new_cap = (call_count + entry_nvals) * 2;
+                    LG_TRY(LAGraph_Realloc((void **) &call_i, (size_t) new_cap,
+                                           (size_t) call_cap, sizeof(GrB_Index), msg));
+                    LG_TRY(LAGraph_Realloc((void **) &call_j, (size_t) new_cap,
+                                           (size_t) call_cap, sizeof(GrB_Index), msg));
+                    LG_TRY(LAGraph_Realloc((void **) &call_x, (size_t) new_cap,
+                                           (size_t) call_cap, sizeof(bool), msg));
+                    call_cap = new_cap;
+                }
 
-                    for (GrB_Index k = 0; k < entry_nvals2; ++k)
-                    {
-                        GrB_Index v = extract_idx[k];
-                        call_i[call_count] = start_states[i];
-                        call_j[call_count] = v * V + v;
-                        call_x[call_count] = true;
-                        call_count++;
-                    }
+                for (GrB_Index k = 0; k < entry_nvals; ++k)
+                {
+                    GrB_Index v = extract_idx[k];
+                    call_i[call_count] = start_states[i];
+                    call_j[call_count] = v * V + v;
+                    call_x[call_count] = true;
+                    call_count++;
                 }
 
                 // skip over nonterminal i using the summary edges

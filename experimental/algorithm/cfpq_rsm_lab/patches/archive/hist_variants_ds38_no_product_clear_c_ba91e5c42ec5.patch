@@ -1,0 +1,10 @@
+--- a/experimental/algorithm/LAGraph_CFPQ_RSM.c
++++ b/experimental/algorithm/LAGraph_CFPQ_RSM.c
+@@ -98,7 +98,6 @@
+ // C |= A * B, using one reused QV x V product temporary.
+ static GrB_Info s_mul_acc(GrB_Matrix C, GrB_Matrix A, GrB_Matrix B, GrB_Matrix T)
+ {
+-    H_TRY(GrB_Matrix_clear(T));
+     H_TRY(GrB_mxm(T, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, A, B, GrB_NULL));
+     H_TRY(GrB_eWiseAdd(C, GrB_NULL, GrB_NULL, GrB_LOR, C, T, GrB_NULL));
+     return GrB_SUCCESS;

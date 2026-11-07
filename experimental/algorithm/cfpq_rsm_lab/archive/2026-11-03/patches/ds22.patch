@@ -1,0 +1,68 @@
+--- a/baseline.c
++++ b/ds22.c
+@@ -26,6 +26,7 @@
+         GrB_free(&M_call);                                                                         \
+         GrB_free(&M_new);                                                                          \
+         GrB_free(&scratch);                                                                        \
++        GrB_free(&fresh_B);                                                                        \
+         GrB_free(&s_temp);                                                                         \
+         GrB_free(&rowvec);                                                                         \
+         LAGraph_Free((void **)&term_active, NULL);                                                 \
+@@ -130,6 +131,7 @@
+     GrB_Matrix M_call = GrB_NULL;
+     GrB_Matrix M_new = GrB_NULL;
+     GrB_Matrix scratch = GrB_NULL;
++    GrB_Matrix fresh_B = GrB_NULL; // (Q*V) x V: new frontier in block coordinates
+     GrB_Matrix s_temp = GrB_NULL; // QV x V product scratch for s_mul_acc
+     GrB_Matrix new_edges = GrB_NULL;
+     GrB_Matrix diag_entry = GrB_NULL;
+@@ -266,6 +268,7 @@
+     GRB_TRY(GrB_Matrix_new(&M, GrB_BOOL, Q, V * V));
+     GRB_TRY(GrB_Matrix_new(&acc, GrB_BOOL, Q*V, V));
+     GRB_TRY(GrB_Matrix_new(&M_call, GrB_BOOL, Q, V * V));
++    GRB_TRY(GrB_Matrix_new(&fresh_B, GrB_BOOL, Q * V, V));
+     GRB_TRY(GrB_Matrix_new(&scratch, GrB_BOOL, Q, V * V));
+     GRB_TRY(GrB_Matrix_new(&s_temp, GrB_BOOL, Q * V, V));
+     GRB_TRY(GrB_Matrix_new(&new_edges, GrB_BOOL, 1, V * V));
+@@ -316,7 +319,8 @@
+         GRB_TRY(GrB_Matrix_setElement_BOOL(M, true, start_state, s * V + s));
+         GRB_TRY(GrB_Vector_setElement_BOOL(source_mask, true, s));
+     }
+-    GRB_TRY(GrB_Matrix_dup(&P, M));
++    // DS-22: visited set in block coordinates, P[q*V+u, v] <-> M[q, u*V+v]
++    GRB_TRY(GxB_Matrix_reshapeDup(&P, M, false, Q * V, V, GrB_NULL));
+ 
+     GrB_Index m_nvals = 0;
+     GRB_TRY(GrB_Matrix_nvals(&m_nvals, M));
+@@ -447,13 +451,26 @@
+             GRB_TRY(GxB_Matrix_reshape(new_edges, false, 1, V * V, GrB_NULL));
+         }
+ 
+-        // Phase 5: M_new = (reshape(acc) | M_call) \ P
++        // Phase 5: visited subtraction in block coordinates.
++        // 1. M_call: Q x (V*V) -> (Q*V) x V, row-major.
++        GRB_TRY(GxB_Matrix_reshape(M_call, false, Q * V, V, GrB_NULL));
++
++        // 2. fresh_B = (acc | M_call) \ P, i.e. the unseen new frontier.
++        GRB_TRY(GrB_eWiseAdd(fresh_B, P, GrB_NULL, GrB_LOR, acc, M_call, GrB_DESC_RSC));
++
++        // 3. P |= fresh_B.
++        GRB_TRY(GrB_eWiseAdd(P, GrB_NULL, GrB_NULL, GrB_LOR, P, fresh_B, GrB_NULL));
++
++        // 4. M_new = row-major reshape of fresh_B back to Q x (V*V).
+         GRB_TRY(GrB_free(&M_new));
+-        GRB_TRY(GxB_Matrix_reshapeDup(&M_new, acc, false, Q, V * V, GrB_NULL));
++        GRB_TRY(GxB_Matrix_reshapeDup(&M_new, fresh_B, false, Q, V * V, GrB_NULL));
++
++        // 5. clear acc, then M_call before restoring its Q x (V*V) shape.
+         GRB_TRY(GrB_Matrix_clear(acc));
+-        GRB_TRY(GrB_eWiseAdd(M_new, P, GrB_NULL, GrB_LOR, M_new, M_call, GrB_DESC_RSC));
+-        GRB_TRY(GrB_eWiseAdd(P, GrB_NULL, GrB_NULL, GrB_LOR, P, M_new, GrB_NULL));
+-
++        GRB_TRY(GrB_Matrix_clear(M_call));
++        GRB_TRY(GxB_Matrix_reshape(M_call, false, Q, V * V, GrB_NULL));
++
++        // 6. baseline frontier swap and termination check.
+         GrB_Matrix swap = M;
+         M = M_new;
+         M_new = swap;

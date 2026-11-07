@@ -103,6 +103,16 @@ typedef struct
     double wupdate_s;
     double retprod_s;
 
+    // Nested operation timings; these overlap phase/setup times.
+    double grouped_s; uint64_t grouped_calls;
+    double group_setup_s; uint64_t group_setup_calls;
+    double compaction_s; uint64_t compaction_calls;
+    double routing_setup_s; uint64_t routing_setup_calls;
+    double routing_s; uint64_t routing_calls;
+    double fusion_setup_s; uint64_t fusion_setup_calls;
+    double fusion_s; uint64_t fusion_calls;
+    uint64_t compact_q, waiting_blocks, fused_blocks, group_count, group_columns;
+
     // call shape
     uint64_t q, v, nterm, nnonterm, nboxes_called, nboxes_final, nsources, seed_entries;
 
@@ -387,6 +397,10 @@ static inline void cfpq_prof_emit(cfpq_prof *p, double total_s, double cleanup_s
     struct rusage ru;
     memset(&ru, 0, sizeof(ru));
     getrusage(RUSAGE_SELF, &ru);
+    fprintf(p->summary,
+        "grouped_s=%.9f;grouped_calls=%llu;group_setup_s=%.9f;group_setup_calls=%llu;compaction_s=%.9f;compaction_calls=%llu;routing_setup_s=%.9f;routing_setup_calls=%llu;routing_s=%.9f;routing_calls=%llu;fusion_setup_s=%.9f;fusion_setup_calls=%llu;fusion_s=%.9f;fusion_calls=%llu;compact_q=%llu;waiting_blocks=%llu;fused_blocks=%llu;group_count=%llu;group_columns=%llu;probe_coverage=phase-and-operation;candidate_counts_available=0;prefix_overlap_available=0;legacy_operation_counts_available=0;",
+        p->grouped_s, (unsigned long long)p->grouped_calls, p->group_setup_s, (unsigned long long)p->group_setup_calls, p->compaction_s, (unsigned long long)p->compaction_calls, p->routing_setup_s, (unsigned long long)p->routing_setup_calls, p->routing_s, (unsigned long long)p->routing_calls, p->fusion_setup_s, (unsigned long long)p->fusion_setup_calls, p->fusion_s, (unsigned long long)p->fusion_calls,
+        (unsigned long long)p->compact_q, (unsigned long long)p->waiting_blocks, (unsigned long long)p->fused_blocks, (unsigned long long)p->group_count, (unsigned long long)p->group_columns);
     fprintf(p->summary,
             "tag=%s;call=%llu;q=%llu;v=%llu;nterm=%llu;nnonterm=%llu;nboxes_called=%llu;"
             "nboxes_final=%llu;nsources=%llu;seed_entries=%llu;iters=%llu;"

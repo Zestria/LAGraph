@@ -1,0 +1,210 @@
+--- a/experimental/algorithm/LAGraph_CFPQ_RSM.c
++++ b/experimental/algorithm/LAGraph_CFPQ_RSM.c
+@@ -21,7 +21,8 @@
+ #define LG_FREE_WORK                                                                               \
+     {                                                                                              \
+         GrB_free(&M);                                                                              \
+-        GrB_free(&P);                                                                              \
++        s_bag_free(&P_bag);                                                                        \
++        GrB_free(&bag_carry);                                                                      \
+         GrB_free(&acc);                                                                            \
+         GrB_free(&M_call);                                                                         \
+         GrB_free(&M_new);                                                                          \
+@@ -104,6 +105,128 @@
+     return GrB_SUCCESS;
+ }
+ 
++
++// ---------------------------------------------------------------------------
++// Fixed component bag: owned disjoint BOOL components, at most one per
++// binary magnitude rank.  Capacity is fixed at bag creation.
++// ---------------------------------------------------------------------------
++
++typedef struct
++{
++    GrB_Matrix *comp; // live owned components, [0, count)
++    GrB_Index *nnz;   // cached component nnz
++    GrB_Index count;
++    GrB_Index total;  // exact sum of live component nnz
++    GrB_Index cap;
++    GrB_Index nrows;
++    GrB_Index ncols;
++} s_bag;
++
++#define S_BAG_CAP ((GrB_Index) (8 * sizeof(GrB_Index) + 1))
++
++static GrB_Index s_bag_rank(GrB_Index nnz)
++{
++    GrB_Index rank = 0;
++    while (nnz > 1)
++    {
++        nnz >>= 1;
++        rank++;
++    }
++    return rank;
++}
++
++static int s_bag_init(s_bag *bag, GrB_Index nrows, GrB_Index ncols, char *msg)
++{
++    memset(bag, 0, sizeof(*bag));
++    bag->cap = S_BAG_CAP;
++    bag->nrows = nrows;
++    bag->ncols = ncols;
++    int rc = LAGraph_Calloc((void **) &bag->comp, (size_t) bag->cap, sizeof(GrB_Matrix), msg);
++    if (rc != GrB_SUCCESS)
++        return rc;
++    rc = LAGraph_Calloc((void **) &bag->nnz, (size_t) bag->cap, sizeof(GrB_Index), msg);
++    if (rc != GrB_SUCCESS)
++    {
++        LAGraph_Free((void **) &bag->comp, msg);
++        return rc;
++    }
++    return GrB_SUCCESS;
++}
++
++static void s_bag_free(s_bag *bag)
++{
++    if (bag->comp != NULL)
++    {
++        for (GrB_Index k = 0; k < bag->count; ++k)
++            GrB_free(&bag->comp[k]);
++    }
++    LAGraph_Free((void **) &bag->comp, NULL);
++    LAGraph_Free((void **) &bag->nnz, NULL);
++    bag->count = 0;
++    bag->total = 0;
++}
++
++// Take ownership of *carry; on success *carry becomes NULL.  The carry's
++// original nnz is disjoint from every live component.
++static GrB_Info s_bag_append(s_bag *bag, GrB_Matrix *carry, GrB_Index carry_nnz)
++{
++    if (*carry == GrB_NULL || carry_nnz == 0)
++        return GrB_SUCCESS;
++
++    bag->total += carry_nnz;
++    while (true)
++    {
++        GrB_Index rank = s_bag_rank(carry_nnz);
++        GrB_Index slot = bag->count;
++        for (GrB_Index k = 0; k < bag->count; ++k)
++        {
++            if (s_bag_rank(bag->nnz[k]) == rank)
++            {
++                slot = k;
++                break;
++            }
++        }
++        if (slot == bag->count)
++            break;
++
++        H_TRY(GrB_eWiseAdd(*carry, GrB_NULL, GrB_NULL, GrB_LOR, *carry, bag->comp[slot],
++                           GrB_NULL));
++        carry_nnz += bag->nnz[slot];
++        H_TRY(GrB_free(&bag->comp[slot]));
++        for (GrB_Index k = slot; k + 1 < bag->count; ++k)
++        {
++            bag->comp[k] = bag->comp[k + 1];
++            bag->nnz[k] = bag->nnz[k + 1];
++        }
++        bag->count--;
++    }
++
++    if (bag->count >= bag->cap)
++        return GrB_OUT_OF_MEMORY; // impossible with one component per rank
++
++    bag->comp[bag->count] = *carry;
++    bag->nnz[bag->count] = carry_nnz;
++    bag->count++;
++    *carry = GrB_NULL;
++    return GrB_SUCCESS;
++}
++
++// candidate = candidate \ bag; visits the most recently appended components
++// first and refreshes candidate_nnz after each mask.
++static GrB_Info s_bag_subtract(GrB_Matrix candidate, GrB_Index *candidate_nnz,
++                               const s_bag *bag)
++{
++    for (GrB_Index k = bag->count; k > 0; --k)
++    {
++        H_TRY(GrB_apply(candidate, bag->comp[k - 1], GrB_NULL, GrB_IDENTITY_BOOL, candidate,
++                        GrB_DESC_RSC));
++        H_TRY(GrB_Matrix_nvals(candidate_nnz, candidate));
++        if (*candidate_nnz == 0)
++            break;
++    }
++    return GrB_SUCCESS;
++}
++
+ #undef H_TRY
+ 
+ typedef struct
+@@ -125,7 +248,9 @@
+ 
+     // working matrices / vectors
+     GrB_Matrix M = GrB_NULL;
+-    GrB_Matrix P = GrB_NULL;
++    s_bag P_bag;
++    memset(&P_bag, 0, sizeof(P_bag));
++    GrB_Matrix bag_carry = GrB_NULL;
+     GrB_Matrix acc = GrB_NULL;
+     GrB_Matrix M_call = GrB_NULL;
+     GrB_Matrix M_new = GrB_NULL;
+@@ -264,6 +389,7 @@
+ 
+     // allocate working matrices
+     GRB_TRY(GrB_Matrix_new(&M, GrB_BOOL, Q, V * V));
++    LG_TRY(s_bag_init(&P_bag, Q, V * V, msg));
+     GRB_TRY(GrB_Matrix_new(&acc, GrB_BOOL, Q*V, V));
+     GRB_TRY(GrB_Matrix_new(&M_call, GrB_BOOL, Q, V * V));
+     GRB_TRY(GrB_Matrix_new(&scratch, GrB_BOOL, Q, V * V));
+@@ -316,10 +442,13 @@
+         GRB_TRY(GrB_Matrix_setElement_BOOL(M, true, start_state, s * V + s));
+         GRB_TRY(GrB_Vector_setElement_BOOL(source_mask, true, s));
+     }
+-    GRB_TRY(GrB_Matrix_dup(&P, M));
+-
+     GrB_Index m_nvals = 0;
+     GRB_TRY(GrB_Matrix_nvals(&m_nvals, M));
++    if (m_nvals > 0)
++    {
++        GRB_TRY(GrB_Matrix_dup(&bag_carry, M));
++        LG_TRY(s_bag_append(&P_bag, &bag_carry, m_nvals));
++    }
+     while (m_nvals > 0)
+     {
+         // mark rows of M that currently contain any true entry.
+@@ -447,18 +576,29 @@
+             GRB_TRY(GxB_Matrix_reshape(new_edges, false, 1, V * V, GrB_NULL));
+         }
+ 
+-        // Phase 5: M_new = (reshape(acc) | M_call) \ P
++        // Phase 5: M_new = (reshape(acc) | M_call) \ P, with the visited set
++        // held as disjoint summary components.
+         GRB_TRY(GrB_free(&M_new));
+         GRB_TRY(GxB_Matrix_reshapeDup(&M_new, acc, false, Q, V * V, GrB_NULL));
+         GRB_TRY(GrB_Matrix_clear(acc));
+-        GRB_TRY(GrB_eWiseAdd(M_new, P, GrB_NULL, GrB_LOR, M_new, M_call, GrB_DESC_RSC));
+-        GRB_TRY(GrB_eWiseAdd(P, GrB_NULL, GrB_NULL, GrB_LOR, P, M_new, GrB_NULL));
++        GRB_TRY(GrB_eWiseAdd(M_new, GrB_NULL, GrB_NULL, GrB_LOR, M_new, M_call, GrB_NULL));
++
++        GrB_Index m_new_nvals = 0;
++        GRB_TRY(GrB_Matrix_nvals(&m_new_nvals, M_new));
++        if (P_bag.total > 0)
++            LG_TRY(s_bag_subtract(M_new, &m_new_nvals, &P_bag));
++
++        if (m_new_nvals > 0)
++        {
++            GRB_TRY(GrB_Matrix_dup(&bag_carry, M_new));
++            LG_TRY(s_bag_append(&P_bag, &bag_carry, m_new_nvals));
++        }
+ 
+         GrB_Matrix swap = M;
+         M = M_new;
+         M_new = swap;
+ 
+-        GRB_TRY(GrB_Matrix_nvals(&m_nvals, M));
++        m_nvals = m_new_nvals;
+     }
+ 
+     // reachable(w) = OR_s source_mask(s) & graph_nt[start](s, w)

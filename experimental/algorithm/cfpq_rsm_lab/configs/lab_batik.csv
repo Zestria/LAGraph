@@ -1,0 +1,8 @@
+data/graphs/java/avrora.g,data/grammars/java_points_to.cnf,-1,results/experiment_2026-10-26_20-59-13/candidates/java_points_to_avrora_start.result
+data/graphs/rdf/eclass.g,data/grammars/nested_parentheses_subClassOf_type.cnf,-1,results/experiment_2026-10-26_20-59-13/candidates/nested_parentheses_subClassOf_type_eclass_start.result
+data/graphs/rdf/go.g,data/grammars/nested_parentheses_subClassOf_type.cnf,-1,results/experiment_2026-10-26_20-59-13/candidates/nested_parentheses_subClassOf_type_go_start.result
+data/graphs/rdf/go_hierarchy.g,data/grammars/nested_parentheses_subClassOf_type.cnf,-1,results/experiment_2026-10-26_20-59-13/candidates/nested_parentheses_subClassOf_type_go_hierarchy_start.result
+data/graphs/c_alias/mm.g,data/grammars/c_alias.cnf,-1,results/experiment_2026-10-26_20-59-13/candidates/c_alias_mm_start.result
+data/graphs/c_alias/init.g,data/grammars/c_alias.cnf,-1,results/experiment_2026-10-26_20-59-13/candidates/c_alias_init_start.result
+data/graphs/c_alias/block.g,data/grammars/c_alias.cnf,-1,results/experiment_2026-10-26_20-59-13/candidates/c_alias_block_start.result
+data/graphs/java/batik.g,data/grammars/java_points_to.cnf,-1,results/experiment_2026-10-26_20-59-13/candidates/java_points_to_batik_start.result

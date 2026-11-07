@@ -1,0 +1,430 @@
+--- a/experimental/algorithm/LAGraph_CFPQ_RSM.c
++++ b/experimental/algorithm/LAGraph_CFPQ_RSM.c
+@@ -41,7 +41,9 @@
+         LAGraph_Free((void **)&call_x, NULL);                                                      \
+         LAGraph_Free((void **)&extract_idx, NULL);                                                 \
+         FREE_GRB_MATRIX_ARRAY(graph_nt, num_nonterm);                                              \
+-        FREE_GRB_MATRIX_ARRAY(W, num_nonterm);                                                     \
++        s_waitboxes_free(&waitboxes, num_nonterm);                                                \
++        GrB_free(&gbuild);                                                                         \
++        s_tuples_free(&atup);                                                     \
+     }
+ 
+ #define LG_FREE_ALL                                                                                \
+@@ -120,6 +122,294 @@
+     H_TRY(GrB_eWiseAdd(*C, GrB_NULL, GrB_NULL, GrB_LOR, *C, *T, GrB_NULL));
+     return GrB_SUCCESS;
+ }
++
++#define S_NO_STATE ((GrB_Index)-1)
++// reusable tuple arrays (both GrB_Index and Boolean value arrays)
++typedef struct
++{
++    GrB_Index *i;
++    GrB_Index *j;
++    bool *x;
++    GrB_Index cap;
++} S_TupleBuf;
++
++static void s_tuples_free(S_TupleBuf *b)
++{
++    LAGraph_Free((void **)&b->i, NULL);
++    LAGraph_Free((void **)&b->j, NULL);
++    LAGraph_Free((void **)&b->x, NULL);
++    b->cap = 0;
++}
++
++static GrB_Info s_tuples_reserve(S_TupleBuf *b, GrB_Index need, char *msg)
++{
++    if (need <= b->cap)
++        return GrB_SUCCESS;
++    if (need > SIZE_MAX / sizeof(GrB_Index))
++        return GrB_OUT_OF_MEMORY;
++
++    GrB_Index cap = (b->cap == 0) ? 64 : b->cap;
++    while (cap < need)
++    {
++        if (cap > (GrB_Index)(SIZE_MAX / (8 * sizeof(GrB_Index))))
++        {
++            cap = need;
++            break;
++        }
++        cap *= 2;
++    }
++
++    int st;
++    st = LAGraph_Realloc((void **)&b->i, (size_t)cap, (size_t)b->cap, sizeof(GrB_Index), msg);
++    if (st < 0)
++        return (GrB_Info)st;
++    st = LAGraph_Realloc((void **)&b->j, (size_t)cap, (size_t)b->cap, sizeof(GrB_Index), msg);
++    if (st < 0)
++        return (GrB_Info)st;
++    st = LAGraph_Realloc((void **)&b->x, (size_t)cap, (size_t)b->cap, sizeof(bool), msg);
++    if (st < 0)
++        return (GrB_Info)st;
++
++    b->cap = cap;
++    return GrB_SUCCESS;
++}
++
++// allocation helpers for the setup helper, which has its own cleanup label
++#define S_ALLOC(ptr, nitems, size)                                                                 \
++    {                                                                                              \
++        int _sst = LAGraph_Malloc((void **)&(ptr), (size_t)(nitems), (size_t)(size), NULL);        \
++        if (_sst < 0)                                                                              \
++        {                                                                                          \
++            info = (GrB_Info)_sst;                                                                 \
++            goto cleanup;                                                                          \
++        }                                                                                          \
++    }
++#define S_CALLOC(ptr, nitems, size)                                                                \
++    {                                                                                              \
++        int _sst = LAGraph_Calloc((void **)&(ptr), (size_t)(nitems), (size_t)(size), NULL);        \
++        if (_sst < 0)                                                                              \
++        {                                                                                          \
++            info = (GrB_Info)_sst;                                                                 \
++            goto cleanup;                                                                          \
++        }                                                                                          \
++    }
++#define S_FREE(ptr) LAGraph_Free((void **)&(ptr), NULL)
++
++#define S_TRY(expr)                                                                                \
++    {                                                                                              \
++        GrB_Info _stry = (expr);                                                                   \
++        if (_stry != GrB_SUCCESS)                                                                  \
++        {                                                                                          \
++            info = _stry;                                                                          \
++            goto cleanup;                                                                          \
++        }                                                                                          \
++    }
++
++// C |= delta with the same first-contribution handle swap as s_mul_acc.
++static GrB_Info s_acc_merge(GrB_Matrix *C, GrB_Matrix *delta, bool *acc_empty)
++{
++    GrB_Index n = 0;
++    H_TRY(GrB_Matrix_nvals(&n, *delta));
++    if (n == 0)
++        return GrB_SUCCESS;
++
++    if (*acc_empty)
++    {
++        GrB_Matrix swap = *C;
++        *C = *delta;
++        *delta = swap;
++        *acc_empty = false;
++    }
++    else
++    {
++        H_TRY(GrB_eWiseAdd(*C, GrB_NULL, GrB_NULL, GrB_LOR, *C, *delta, GrB_NULL));
++    }
++
++    H_TRY(GrB_Matrix_clear(*delta));
++    return GrB_SUCCESS;
++}
++
++typedef struct
++{
++    GrB_Index d;        // number of distinct return destinations
++    GrB_Index *dest;    // [d] compact destination state D_A[l]
++    GrB_Matrix route;   // Q x d, route[q,l] = R_A[q, dest[l]]
++    GrB_Matrix x;       // d x V*V on entry, d*V x V while in use
++    GrB_Matrix w;       // d*V x V waiting prefixes
++    GrB_Matrix p;       // d*V x V local product scratch
++} S_WaitBox;
++
++static void s_waitboxes_free(S_WaitBox **wbp, GrB_Index n)
++{
++    S_WaitBox *wb = *wbp;
++    if (wb == NULL)
++        return;
++    for (GrB_Index i = 0; i < n; ++i)
++    {
++        LAGraph_Free((void **)&wb[i].dest, NULL);
++        GrB_free(&wb[i].route);
++        GrB_free(&wb[i].x);
++        GrB_free(&wb[i].w);
++        GrB_free(&wb[i].p);
++    }
++    LAGraph_Free((void **)wbp, NULL);
++}
++
++static GrB_Info s_waitboxes_init(S_WaitBox *wb, GrB_Index n, GrB_Index Q, GrB_Index V,
++                                 GrB_Matrix *rsm_nonterm, char *msg)
++{
++    GrB_Info info = GrB_SUCCESS;
++    GrB_Index *seen = NULL;
++    GrB_Index *dest_tmp = NULL;
++    GrB_Index *lcol = NULL;
++    GrB_Index maxn = 0;
++    S_TupleBuf ttup;
++    memset(&ttup, 0, sizeof(ttup));
++
++    for (GrB_Index i = 0; i < n; ++i)
++    {
++        if (rsm_nonterm[i] == GrB_NULL)
++            continue;
++        GrB_Index rn = 0;
++        info = GrB_Matrix_nvals(&rn, rsm_nonterm[i]);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        if (rn > maxn)
++            maxn = rn;
++    }
++    S_CALLOC(seen, Q, sizeof(GrB_Index));
++    for (GrB_Index q = 0; q < Q; ++q)
++        seen[q] = S_NO_STATE;
++    S_ALLOC(dest_tmp, maxn, sizeof(GrB_Index));
++    S_ALLOC(lcol, maxn, sizeof(GrB_Index));
++    S_TRY(s_tuples_reserve(&ttup, maxn, msg));
++
++    for (GrB_Index i = 0; i < n; ++i)
++    {
++        if (rsm_nonterm[i] == GrB_NULL)
++            continue;
++        GrB_Index rn = 0;
++        info = GrB_Matrix_nvals(&rn, rsm_nonterm[i]);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        if (rn == 0)
++            continue;
++        GrB_Index nn = rn;
++        info = GrB_Matrix_extractTuples_BOOL(ttup.i, ttup.j, ttup.x, &nn, rsm_nonterm[i]);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++
++        GrB_Index d = 0;
++        for (GrB_Index k = 0; k < nn; ++k)
++        {
++            GrB_Index to = ttup.j[k];
++            if (seen[to] == S_NO_STATE)
++            {
++                seen[to] = d;
++                dest_tmp[d] = to;
++                d++;
++            }
++            lcol[k] = seen[to];
++        }
++        for (GrB_Index l = 0; l < d; ++l)
++            seen[dest_tmp[l]] = S_NO_STATE;
++
++        if (d == 0)
++            continue;
++        if (s_mul_exceeds(d, V, CFPQ_MAX_DIM))
++        {
++            info = GrB_INVALID_VALUE;
++            goto cleanup;
++        }
++
++        S_ALLOC(wb[i].dest, d, sizeof(GrB_Index));
++        memcpy(wb[i].dest, dest_tmp, (size_t)d * sizeof(GrB_Index));
++        wb[i].d = d;
++
++        info = GrB_Matrix_new(&wb[i].route, GrB_BOOL, Q, d);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        for (GrB_Index k = 0; k < nn; ++k)
++        {
++            ttup.j[k] = lcol[k];
++            ttup.x[k] = true;
++        }
++        info = GrB_Matrix_build_BOOL(wb[i].route, ttup.i, ttup.j, ttup.x, nn, GrB_LOR);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++
++        info = GrB_Matrix_new(&wb[i].x, GrB_BOOL, d, V * V);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        info = GrB_Matrix_new(&wb[i].w, GrB_BOOL, d * V, V);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        info = GrB_Matrix_new(&wb[i].p, GrB_BOOL, d * V, V);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++    }
++
++cleanup:
++    S_FREE(seen);
++    S_FREE(dest_tmp);
++    S_FREE(lcol);
++    s_tuples_free(&ttup);
++    return info;
++}
++
++// X = reshape(B^T * M), d*V x V
++static GrB_Info s_shift_compact(GrB_Matrix X, GrB_Matrix B, GrB_Matrix M, GrB_Index d,
++                                GrB_Index V)
++{
++    H_TRY(GrB_mxm(X, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL, B, M, GrB_DESC_T0));
++    H_TRY(GxB_Matrix_reshape(X, false, d * V, V, GrB_NULL));
++    return GrB_SUCCESS;
++}
++
++// restore X to an empty d x V*V matrix for the next sweep
++static GrB_Info s_unshift_compact(GrB_Matrix X, GrB_Index d, GrB_Index V)
++{
++    H_TRY(GrB_Matrix_clear(X));
++    H_TRY(GxB_Matrix_reshape(X, false, d, V * V, GrB_NULL));
++    return GrB_SUCCESS;
++}
++
++// Scatter local rows l*V+u of a d*V x V product to global rows dest[l]*V+u.
++static GrB_Info s_scatter_local(GrB_Matrix local, GrB_Index d, const GrB_Index *dest,
++                                GrB_Index V, GrB_Matrix *gbuild, S_TupleBuf *tup,
++                                GrB_Matrix *acc, bool *acc_empty, char *msg)
++{
++    GrB_Index n = 0;
++    H_TRY(GrB_Matrix_nvals(&n, local));
++    if (n == 0)
++        return GrB_SUCCESS;
++    if (d == 1)
++    {
++        // A single continuation is a contiguous row block. GraphBLAS can
++        // scatter it directly without exporting and rebuilding every tuple.
++        GrB_Index rows[2] = {dest[0] * V, (dest[0] + 1) * V - 1};
++        H_TRY(GrB_Matrix_clear(*gbuild));
++        H_TRY(GrB_Matrix_assign(*gbuild, GrB_NULL, GrB_NULL, local,
++                                rows, GxB_RANGE, GrB_ALL, V, GrB_NULL));
++        return s_acc_merge(acc, gbuild, acc_empty);
++    }
++    H_TRY(s_tuples_reserve(tup, n, msg));
++    H_TRY(GrB_Matrix_extractTuples_BOOL(tup->i, tup->j, tup->x, &n, local));
++    for (GrB_Index k = 0; k < n; ++k)
++    {
++        GrB_Index lr = tup->i[k];
++        GrB_Index l = lr / V;
++        GrB_Index u = lr % V;
++        if (l >= d)
++            return GrB_INVALID_INDEX;
++        tup->i[k] = dest[l] * V + u;
++        tup->x[k] = true;
++    }
++    H_TRY(GrB_Matrix_clear(*gbuild));
++    H_TRY(GrB_Matrix_build_BOOL(*gbuild, tup->i, tup->j, tup->x, n, GrB_LOR));
++    return s_acc_merge(acc, gbuild, acc_empty);
++}
++
+ 
+ #undef H_TRY
+ 
+@@ -164,7 +454,9 @@
+     GrB_Index extract_cap = 0;
+ 
+     GrB_Matrix *graph_nt = NULL;
+-    GrB_Matrix *W = NULL;         // QV x V, W[i] = (rsm_nonterm[i])^T * P
++    S_WaitBox *waitboxes = NULL;
++    GrB_Matrix gbuild = GrB_NULL;
++    S_TupleBuf atup = {0};
+     GrB_Index num_term = 0;
+     GrB_Index num_nonterm = 0;
+ 
+@@ -273,16 +565,16 @@
+     //--------------------------------------------------------------------------
+ 
+     LG_TRY(LAGraph_Calloc((void **)&graph_nt, num_nonterm, sizeof(GrB_Matrix), msg));
+-    LG_TRY(LAGraph_Calloc((void **)&W, num_nonterm, sizeof(GrB_Matrix), msg));
++    LG_TRY(LAGraph_Calloc((void **)&waitboxes, num_nonterm, sizeof(S_WaitBox), msg));
+ 
+     for (size_t i = 0; i < num_nonterm; ++i)
+     {
+         GRB_TRY(GrB_Matrix_new(&graph_nt[i], GrB_BOOL, V, V));
+-        if (rsm_nonterm[i] == GrB_NULL)
+-            continue;
+-
+-        GRB_TRY(GrB_Matrix_new(&W[i], GrB_BOOL, Q * V, V));
+-    }
++
++    }
++
++    LG_TRY(s_waitboxes_init(waitboxes, num_nonterm, Q, V, rsm_nonterm, msg));
++    GRB_TRY(GrB_Matrix_new(&gbuild, GrB_BOOL, Q * V, V));
+ 
+     // allocate working matrices
+     GRB_TRY(GrB_Matrix_new(&M, GrB_BOOL, Q, V * V));
+@@ -369,29 +661,32 @@
+             LG_TRY(s_unshift(scratch, Q, V));
+         }
+ 
+-        // Phases 2+3: nonterminal transitions and calls
++        // Phases 2+3: nonterminal transitions and calls.  Each callee uses only
++        // its distinct return destinations; local rows are scattered through
++        // waitboxes[i].dest.
+         GRB_TRY(GrB_Matrix_clear(M_call));
+         call_count = 0;
+         for (size_t i = 0; i < num_nonterm; ++i)
+         {
+-            if (rsm_nonterm[i] == GrB_NULL)
++            S_WaitBox *wb = &waitboxes[i];
++            if (rsm_nonterm[i] == GrB_NULL || wb->d == 0)
+                 continue;
+ 
+-            // scratch = reshape(R_A^T * M), QV x V
+-            LG_TRY(s_shift(scratch, rsm_nonterm[i], M, Q, V));
++            // x = reshape(B_A^T * M), d*V x V
++            LG_TRY(s_shift_compact(wb->x, wb->route, M, wb->d, V));
+ 
+             GrB_Index x_nvals = 0;
+-            GRB_TRY(GrB_Matrix_nvals(&x_nvals, scratch));
++            GRB_TRY(GrB_Matrix_nvals(&x_nvals, wb->x));
+             if (x_nvals > 0)
+             {
+                 // call: every vertex v where X is nonzero enters nonterminal i
+                 // at (v, v), in its start state.  Collect the tuples and build
+                 // M_call once after the loop.
+-                GRB_TRY(GrB_reduce(entry_vec, GrB_NULL, GrB_NULL, GrB_LOR_MONOID_BOOL, scratch,
++                GRB_TRY(GrB_reduce(entry_vec, GrB_NULL, GrB_NULL, GrB_LOR_MONOID_BOOL, wb->x,
+                                    GrB_DESC_T0));
+                 GrB_Index entry_nvals = 0;
+                 GRB_TRY(GrB_Vector_nvals(&entry_nvals, entry_vec));
+-                // A nonempty scratch has at least one active column.
++                // A nonempty x has at least one active column.
+                 if (entry_nvals > extract_cap)
+                 {
+                     LG_TRY(LAGraph_Realloc((void **) &extract_idx, (size_t) entry_nvals,
+@@ -426,12 +721,18 @@
+                 GrB_Index gnt_nvals = 0;
+                 GRB_TRY(GrB_Matrix_nvals(&gnt_nvals, graph_nt[i]));
+                 if (gnt_nvals > 0)
+-                    LG_TRY(s_mul_acc(&acc, &s_temp, scratch, graph_nt[i], &acc_empty));
+-                
+-                // RETURN bookkeeping: W[i] == reshape(R_i' * P)
+-                GRB_TRY(GrB_eWiseAdd(W[i], GrB_NULL, GrB_NULL, GrB_LOR, W[i], scratch, GrB_NULL));
++                {
++                    GRB_TRY(GrB_mxm(wb->p, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL, wb->x,
++                                    graph_nt[i], GrB_NULL));
++                    LG_TRY(s_scatter_local(wb->p, wb->d, wb->dest, V, &gbuild, &atup,
++                                           &acc, &acc_empty, msg));
++                }
++
++                // RETURN bookkeeping: W_A |= X_A, destination-local
++                GRB_TRY(GrB_eWiseAdd(wb->w, GrB_NULL, GrB_NULL, GrB_LOR, wb->w, wb->x,
++                                     GrB_NULL));
+             }
+-            LG_TRY(s_unshift(scratch, Q, V));
++            LG_TRY(s_unshift_compact(wb->x, wb->d, V));
+         }
+ 
+         // M_call holds the union of every box's start-state / vertex tuples
+@@ -476,13 +777,19 @@
+             GRB_TRY(GrB_eWiseAdd(graph_nt[i], GrB_NULL, GrB_NULL, GrB_LOR, graph_nt[i], new_edges,
+                                  GrB_NULL));
+ 
+-            // acc |= W * dG, where W = R_A^T * P
+-            if (W[i] != GrB_NULL)
++            // acc |= W_A * dG, then scatter local destination rows
++            S_WaitBox *wb = &waitboxes[i];
++            if (wb->w != GrB_NULL)
+             {
+                 GrB_Index w_nvals = 0;
+-                GRB_TRY(GrB_Matrix_nvals(&w_nvals, W[i]));
++                GRB_TRY(GrB_Matrix_nvals(&w_nvals, wb->w));
+                 if (w_nvals > 0)
+-                    LG_TRY(s_mul_acc(&acc, &s_temp, W[i], new_edges, &acc_empty));
++                {
++                    GRB_TRY(GrB_mxm(wb->p, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL, wb->w,
++                                    new_edges, GrB_NULL));
++                    LG_TRY(s_scatter_local(wb->p, wb->d, wb->dest, V, &gbuild, &atup,
++                                           &acc, &acc_empty, msg));
++                }
+             }
+ 
+             GRB_TRY(GxB_Matrix_reshape(new_edges, false, 1, V * V, GrB_NULL));

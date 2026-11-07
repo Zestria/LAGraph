@@ -1,0 +1,45 @@
+baseline_commit: bb7dc96e66a99ca7628374c177f04d5dab36bd92
+checkout_head: ba6e43080c5c9b170b9c59eb5ed1ae2b56ed447a
+baseline_source: experimental/algorithm/LAGraph_CFPQ_RSM.c at baseline_commit
+current_source: experimental/algorithm/LAGraph_CFPQ_RSM.c in working tree
+baseline_sha256: 2eb47b26cfb729710424c5aee0dbad1fafb870d2cfefec450f9fc0c7bd8efae8
+current_sha256: c7efb94f21bbbddc220ab8371d01cd4c852e3ab110d5942367932676f8916928
+old_lab_baseline_sha256: f3642839be04eee2d6411d3db9d6973c50c19f386d7e61f4d9ff5a926af0447b
+working_tree_status:
+  ?? .clangd
+  ?? CFPQ_RSM_OPTIMIZATION_HISTORY.md
+  ?? DEEPSEEK_FEEDBACK.md
+  ?? DEEPSEEK_INSTRUCTIONS.md
+  ?? DEEPSEEK_REMAINDER.md
+  ?? build-exp-release/
+  ?? experimental/algorithm/cfpq_rsm_lab/archive/
+  ?? experimental/algorithm/cfpq_rsm_lab/run_optimized_v1.sh
+  ?? experimental/algorithm/cfpq_rsm_lab/run_overnight.sh
+  ?? experimental/algorithm/cfpq_rsm_lab/run_r10_overnight.sh
+  ?? experimental/algorithm/cfpq_rsm_lab/run_r9_overnight.sh
+  ?? experimental/algorithm/cfpq_rsm_lab/run_s100_selected.sh
+  ?? experimental/algorithm/cfpq_rsm_lab/summarize_optimized_v1.py
+  ?? experimental/algorithm/cfpq_rsm_lab/summarize_overnight.py
+  ?? experimental/algorithm/cfpq_rsm_lab/summarize_r10_overnight.py
+  ?? experimental/algorithm/cfpq_rsm_lab/summarize_r9_overnight.py
+  ?? experimental/algorithm/cfpq_rsm_lab/summarize_s100_selected.py
+  ?? experimental/algorithm/cfpq_rsm_lab/tests/test_run_order.py
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/baseline.c
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/compare_bb7_current/
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/config_block.c
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/d1_native.c
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/d3_masked_product.c
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/ds20.c
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/ds21.c
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/ds22.c
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/ds30_assign.c
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/ds31_joint.c
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/ds32_empty.c
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/ds33_format.c
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/ds34_lazy_p.c
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/ds35_lazy_nt.c
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/ds36_pair.c
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/ds37_fused.c
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/ds38_no_product_clear.c
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/ds39_direct_calls.c
+  ?? experimental/algorithm/cfpq_rsm_lab/variants/optimized_v1.c

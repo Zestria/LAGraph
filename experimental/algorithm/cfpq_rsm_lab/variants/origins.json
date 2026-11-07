@@ -1,0 +1,874 @@
+{
+  "archive_ds31_joint": {
+    "sha256": "3b39940a19ba885d0a4ac5ae7798ab984425cf8ec3fa527ae0726dc369e14270",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/variants/ds31_joint.c",
+      "archive/2026-11-03/sources/ds31_joint.c",
+      "variants/ds31_joint.c"
+    ],
+    "known_historical_parent": "archive_old_baseline"
+  },
+  "archive_ds32_empty": {
+    "sha256": "a156634dba2e5aae15d8881df31b4250c6cdb2a11be88184cb0f4361b0022675",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/variants/ds32_empty.c",
+      "archive/2026-11-03/sources/ds32_empty.c",
+      "variants/ds32_empty.c"
+    ],
+    "known_historical_parent": "archive_old_baseline"
+  },
+  "archive_ds36_pair": {
+    "sha256": "796030c006dc0df62d0aa51b21638015ea7181058627018e9faa6711301e29df",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/variants/ds36_pair.c",
+      "archive/2026-11-03/sources/ds36_pair.c",
+      "variants/ds36_pair.c"
+    ],
+    "known_historical_parent": "archive_old_baseline"
+  },
+  "archive_ds21": {
+    "sha256": "6668b2e542d94659987015af276a4963ad08a21748dc567f44da9139a09abf5c",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/variants/ds21.c",
+      "archive/2026-11-03/sources/ds21.c",
+      "variants/ds21.c"
+    ],
+    "known_historical_parent": "archive_old_baseline"
+  },
+  "archive_d1_native": {
+    "sha256": "c2d7e56d94b112eefb10ecf11636c9ae7f24940f9fb93ad4814fd5b0db25d259",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/variants/d1_native.c",
+      "archive/2026-11-03/sources/d1_native.c",
+      "variants/d1_native.c"
+    ],
+    "known_historical_parent": "archive_old_baseline"
+  },
+  "hist_variants_optimized_v1_c_7906b13c2ca8": {
+    "sha256": "7906b13c2ca89010ae50e92813ced4801cb1d50baee10b44fdb65521fc6d98bc",
+    "origins": [
+      "git:ef2ec6eb1f629c620d48e0f78548bc5883bb1887",
+      "variants/optimized_v1.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "archive_ds20": {
+    "sha256": "498d857414feced902ef74b23dfcd4b030f3ef77d3540864186b0ffa8eab7fa9",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/variants/ds20.c",
+      "archive/2026-11-03/sources/ds20.c",
+      "variants/ds20.c"
+    ],
+    "known_historical_parent": "archive_old_baseline"
+  },
+  "archive_d3_masked_product": {
+    "sha256": "d1f8f856ca86000e215d92cc8bae0f31a2c512e8999568e5437eec71318accad",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/variants/d3_masked_product.c",
+      "archive/2026-11-03/sources/d3_masked_product.c",
+      "variants/d3_masked_product.c"
+    ],
+    "known_historical_parent": "archive_d1_native"
+  },
+  "archive_ds38_no_product_clear": {
+    "sha256": "ba91e5c42ec505760d601006c7edf3e0d7ccdf6772eb7be1e6cd4198ba370fd7",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/variants/ds38_no_product_clear.c",
+      "archive/2026-11-03/sources/ds38_no_product_clear.c",
+      "variants/ds38_no_product_clear.c"
+    ],
+    "known_historical_parent": "archive_old_baseline"
+  },
+  "archive_ds34_lazy_p": {
+    "sha256": "7aa7d7cca1b4a6210e88bb838d1fbf73f6be2b5278c759f32ed6147439e2692c",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/variants/ds34_lazy_p.c",
+      "archive/2026-11-03/sources/ds34_lazy_p.c",
+      "variants/ds34_lazy_p.c"
+    ],
+    "known_historical_parent": "archive_old_baseline"
+  },
+  "archive_config_block": {
+    "sha256": "291bf59c4494bc657ccb8ef81027be077a9d91b9d78725fe53695a214fcca808",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/variants/config_block.c",
+      "archive/2026-11-03/sources/config_block.c",
+      "variants/config_block.c"
+    ],
+    "known_historical_parent": "archive_old_baseline"
+  },
+  "archive_ds33_format": {
+    "sha256": "9196fb84375c529525e036f2558460c1f36bb4cd90068c823fcef184649da5d0",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/variants/ds33_format.c",
+      "archive/2026-11-03/sources/ds33_format.c",
+      "variants/ds33_format.c"
+    ],
+    "known_historical_parent": "archive_old_baseline"
+  },
+  "archive_old_baseline": {
+    "sha256": "f3642839be04eee2d6411d3db9d6973c50c19f386d7e61f4d9ff5a926af0447b",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/variants/baseline.c",
+      "archive/2026-11-03/sources/baseline.c",
+      "git:8ad78245f85fccafa65240183e03b541812f84d2",
+      "git:f096492636c2cec44dc3df22ea62645b1667d25f",
+      "variants/baseline.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "archive_ds37_fused": {
+    "sha256": "21a56c43510f71f919ef5405a40317a30fe66a075701635eea4c7fc037fe32b3",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/variants/ds37_fused.c",
+      "archive/2026-11-03/sources/ds37_fused.c",
+      "variants/ds37_fused.c"
+    ],
+    "known_historical_parent": "archive_old_baseline"
+  },
+  "archive_ds35_lazy_nt": {
+    "sha256": "5c5331f4dbdbbf02b7a4c956b2d292c3cab2c44972dc818cd6efa942b9bc519b",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/variants/ds35_lazy_nt.c",
+      "archive/2026-11-03/sources/ds35_lazy_nt.c",
+      "variants/ds35_lazy_nt.c"
+    ],
+    "known_historical_parent": "archive_old_baseline"
+  },
+  "archive_ds39_direct_calls": {
+    "sha256": "e9fbc199814b9901fb463631c10439a93d9f97227865f7e97f2dcef73e51ba00",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/variants/ds39_direct_calls.c",
+      "archive/2026-11-03/sources/ds39_direct_calls.c",
+      "variants/ds39_direct_calls.c"
+    ],
+    "known_historical_parent": "archive_old_baseline"
+  },
+  "archive_ds30_assign": {
+    "sha256": "9952a1123f3e2edfae30b60abe006eb09892af9556a3b77eefccb74ef1e46d5f",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/variants/ds30_assign.c",
+      "archive/2026-11-03/sources/ds30_assign.c",
+      "variants/ds30_assign.c"
+    ],
+    "known_historical_parent": "archive_old_baseline"
+  },
+  "archive_ds22": {
+    "sha256": "d3270385d5dd02f13c7c8065ce94e96a26d18cae372df6ca26416194a1511545",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/variants/ds22.c",
+      "archive/2026-11-03/sources/ds22.c",
+      "variants/ds22.c"
+    ],
+    "known_historical_parent": "archive_old_baseline"
+  },
+  "baseline": {
+    "sha256": "c7efb94f21bbbddc220ab8371d01cd4c852e3ab110d5942367932676f8916928",
+    "origins": [
+      "build/deepseek-rXWCtw/final-vs-original/variants/baseline.c",
+      "build/deepseek-rXWCtw/original/LAGraph_CFPQ_RSM.c",
+      "build/deepseek-rXWCtw/patch-01/variants/baseline.c",
+      "git:fa6751b11e38514172cf7e75613cf2bb78d934bc",
+      "rebuilt-active:baseline",
+      "variants/compare_bb7_current/current.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "archive_bb7": {
+    "sha256": "2eb47b26cfb729710424c5aee0dbad1fafb870d2cfefec450f9fc0c7bd8efae8",
+    "origins": [
+      "git:bb7dc96e66a99ca7628374c177f04d5dab36bd92",
+      "variants/compare_bb7_current/baseline.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist__mnew_reshape_dup_S5_acc_shifted_S4_term_active_rows_I1_reshape_inplace_LAGraph_CFPQ_RSM_c_392e309cd2c3": {
+    "sha256": "392e309cd2c3fb8b718b3c69f31e927b57df268a12f1eca190d47af70d6c831c",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/gen/S1a_shared_shift_S1b_call_direct_accum_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S5_acc_shifted_S4_term_active_rows_I1_reshape_inplace/LAGraph_CFPQ_RSM.c",
+      "build/gen/S1a_shared_shift_S1b_call_direct_accum_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S5_acc_shifted_S4_term_active_rows_I1_reshape_inplace/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S4_term_active_rows_LAGraph_CFPQ_RSM_c_c51fce693cf2": {
+    "sha256": "c51fce693cf259e040052c0289c08ab855e44df69d15cc21d175d0c389b72055",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/gen/S1a_shared_shift_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S4_term_active_rows/LAGraph_CFPQ_RSM.c",
+      "build/gen/S1a_shared_shift_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S4_term_active_rows/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist__S3a_single_acc_S3b_mnew_reshape_dup_S5_acc_shifted_S4_term_active_rows_LAGraph_CFPQ_RSM_c_3effd3f69853": {
+    "sha256": "3effd3f69853dcc7cf18348239fc37c658f8b2d67612b7cb20a7d3abf8df6f97",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/gen/S1a_shared_shift_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S5_acc_shifted_S4_term_active_rows/LAGraph_CFPQ_RSM.c",
+      "build/gen/S1a_shared_shift_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S5_acc_shifted_S4_term_active_rows/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist__mnew_reshape_dup_S5_acc_shifted_S4_term_active_rows_I1_reshape_inplace_LAGraph_CFPQ_RSM_c_b376b4c05758": {
+    "sha256": "b376b4c05758bcef438b2a5bfb74f35acbfa2e47cee881c6e2dacffb89acdb60",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/gen/S1a_shared_shift_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S5_acc_shifted_S4_term_active_rows_I1_reshape_inplace/LAGraph_CFPQ_RSM.c",
+      "build/gen/S1a_shared_shift_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S5_acc_shifted_S4_term_active_rows_I1_reshape_inplace/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist__S1b_call_direct_accum_I2_drop_frame_I5_seed_direct_sourcemask_I6_p_dup_LAGraph_CFPQ_RSM_c_58d132e4a572": {
+    "sha256": "58d132e4a572743d3d1c2fe47b32b75811e4e37a6a02e3b4b49f31988198c2ca",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/gen/S1a_shared_shift_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S5_acc_shifted_S4_term_active_rows_I1_reshape_inplace_S1b_call_direct_accum_I2_drop_frame_I5_seed_direct_sourcemask_I6_p_dup/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/gen/S1a_shared_shift_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S5_acc_shifted_S4_term_active_rows_S1b_call_direct_accum/LAGraph_CFPQ_RSM.c",
+      "build/gen/S1a_shared_shift_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S5_acc_shifted_S4_term_active_rows_I1_reshape_inplace_S1b_call_direct_accum_I2_drop_frame_I5_seed_direct_sourcemask_I6_p_dup/LAGraph_CFPQ_RSM.c",
+      "build/gen/S1a_shared_shift_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S5_acc_shifted_S4_term_active_rows_S1b_call_direct_accum/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_d_shift_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S5_acc_s_LAGraph_CFPQ_RSM_c_c66172c4dcbf": {
+    "sha256": "c66172c4dcbfe77c8454b8984d270e68135402aaf7ac1a0e13ce153effde641e",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/gen/champ_S1a_shared_shift_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S5_acc_s/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/gen/s6_S1a_shared_shift_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S5_acc_shifted_S6_/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/gen/s7/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/gen/s7b/LAGraph_CFPQ_RSM.c",
+      "build/gen/champ_S1a_shared_shift_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S5_acc_s/LAGraph_CFPQ_RSM.c",
+      "build/gen/s6_S1a_shared_shift_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S5_acc_shifted_S6_/LAGraph_CFPQ_RSM.c",
+      "build/gen/s7/LAGraph_CFPQ_RSM.c",
+      "build/gen/s7b/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist__evidence_tar_gz_repo_experimental_algorithm_cfpq_rsm_lab_build_gen_dbg_LAGraph_CFPQ_RSM_c_e79d9fdd1a3e": {
+    "sha256": "e79d9fdd1a3ede38fdfd9733f3538a1a1f3a5ebc433e01cef4246fcbbd62497d",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/gen/dbg/LAGraph_CFPQ_RSM.c",
+      "build/gen/dbg/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_dence_tar_gz_repo_experimental_algorithm_cfpq_rsm_lab_build_gen_minimal_LAGraph_CFPQ_RSM_c_cdd36d439fc2": {
+    "sha256": "cdd36d439fc27e81abc883a78bd67d4c9bf61b55071b8b9c25ec9edb5ee2938b",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/gen/minimal/LAGraph_CFPQ_RSM.c",
+      "build/gen/minimal/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_tal_algorithm_cfpq_rsm_lab_build_runs_DS_01_R2_noise_size1_src_baseline_LAGraph_CFPQ_RSM_c_49331a9dfd66": {
+    "sha256": "49331a9dfd6678ddd3494218342c11a7e7fdb136e32b9f29b7af767d196ec9de",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-R2-noise/size1/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-R2-noise/size10/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-R2-noise/size100/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-R2-profile-smoke/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-R2-profile/size1/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-R2-profile/size10/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-R2-profile/size100/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-R2-selftest-wrong/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-R2-smoke/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/DS-01-R2-noise/size1/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/DS-01-R2-noise/size10/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/DS-01-R2-noise/size100/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/DS-01-R2-profile-smoke/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/DS-01-R2-profile/size1/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/DS-01-R2-profile/size10/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/DS-01-R2-profile/size100/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/DS-01-R2-selftest-wrong/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/DS-01-R2-smoke/src/baseline/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_algorithm_cfpq_rsm_lab_build_runs_DS_01_R2_profile_smoke_profile_src_correctness_profile_c_b693dc6c448d": {
+    "sha256": "b693dc6c448df3316d6d7c6cb901cb6f4f2fc5d3e968cae986e6c9af3f2b8d4b",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-R2-profile-smoke/profile/src/correctness_profile.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-R2-profile/size1/profile/src/correctness_profile.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-R2-profile/size10/profile/src/correctness_profile.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-R2-profile/size100/profile/src/correctness_profile.c",
+      "build/runs/DS-01-R2-profile-smoke/profile/src/correctness_profile.c",
+      "build/runs/DS-01-R2-profile/size1/profile/src/correctness_profile.c",
+      "build/runs/DS-01-R2-profile/size10/profile/src/correctness_profile.c",
+      "build/runs/DS-01-R2-profile/size100/profile/src/correctness_profile.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_mental_algorithm_cfpq_rsm_lab_build_runs_DS_01_final_smoke_src_baseline_LAGraph_CFPQ_RSM_c_bba6ee0939d1": {
+    "sha256": "bba6ee0939d10aab0620ee06d354b89c6c775adfdbf94e64ead6b1ae61bb3df0",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-final-smoke/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-noise/size1/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-noise/size10/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-noise/size100/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-profile/size1/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-profile/size10/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-profile/size100/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-selftest-wrong/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/DS-01-final-smoke/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/DS-01-noise/size1/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/DS-01-noise/size10/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/DS-01-noise/size100/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/DS-01-profile/size1/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/DS-01-profile/size10/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/DS-01-profile/size100/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/DS-01-selftest-wrong/src/baseline/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_al_algorithm_cfpq_rsm_lab_build_runs_DS_01_profile_size1_profile_src_correctness_profile_c_2b48d60c0093": {
+    "sha256": "2b48d60c0093ac4ec746996c36db2d2cd0cc2b972d233c482e0319b8df3d1b00",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-profile/size1/profile/src/correctness_profile.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-profile/size10/profile/src/correctness_profile.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/DS-01-profile/size100/profile/src/correctness_profile.c",
+      "build/runs/DS-01-profile/size1/profile/src/correctness_profile.c",
+      "build/runs/DS-01-profile/size10/profile/src/correctness_profile.c",
+      "build/runs/DS-01-profile/size100/profile/src/correctness_profile.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist__experimental_algorithm_cfpq_rsm_lab_build_runs_i3_correct_src_baseline_LAGraph_CFPQ_RSM_c_91a5b7ba3594": {
+    "sha256": "91a5b7ba3594dae49a13e4bd1fdb95052ba70e57a328ce9e7e774b3bb02905bd",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/i3_correct/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/port_check/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/port_check_lab/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/s5_check/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/s5_correct/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/s5_correct2/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/s5_lab/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/s6_correct/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/s7_correct/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/s7b_correct/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0_jit/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage1/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage2a/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage2b/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage3a/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage3b/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage4a/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage4b/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage4c/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage4d/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage4e/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage4f/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage4g/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage5_s1/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage5_s10/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage5_s100/src/baseline/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/verify/orig.c",
+      "build/runs/i3_correct/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/port_check/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/port_check_lab/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/s5_check/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/s5_correct/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/s5_correct2/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/s5_lab/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/s6_correct/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/s7_correct/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/s7b_correct/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0_jit/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage1/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage2a/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage2b/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage3a/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage3b/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage4a/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage4b/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage4c/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage4d/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage4e/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage4f/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage4g/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage5_s1/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage5_s10/src/baseline/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage5_s100/src/baseline/LAGraph_CFPQ_RSM.c",
+      "git:66511702c71b0c4683d203cb9a4c4bcc69fad64a"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_t_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_S5_acc_shifted_LAGraph_CFPQ_RSM_c_e5e990f092b3": {
+    "sha256": "e5e990f092b3ca9bc91dccadc5ff384a1001e3f3e1b5a0fc3828ae9c75917e66",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/s5_check/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3b_mnew_reshape_dup+S5_acc_shifted/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/s5_lab/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3b_mnew_reshape_dup+S5_acc_shifted/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/s5/check/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/s5/modified.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/s5/pre_s6.c",
+      "build/runs/s5_check/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3b_mnew_reshape_dup+S5_acc_shifted/LAGraph_CFPQ_RSM.c",
+      "build/runs/s5_lab/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3b_mnew_reshape_dup+S5_acc_shifted/LAGraph_CFPQ_RSM.c",
+      "build/s5/check/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_S1a_shared_shift_S2_return_prefix_w_S3a_single_acc_S3b_mnew_reshape_dup_LAGraph_CFPQ_RSM_c_01960748a22f": {
+    "sha256": "01960748a22f60e6b999147fe47dd46d5f2921416b09a765d0690c89f88f5d16",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/s5_check/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3b_mnew_reshape_dup/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/s5_lab/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3b_mnew_reshape_dup/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3b_mnew_reshape_dup/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0_jit/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3b_mnew_reshape_dup/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage1/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3b_mnew_reshape_dup/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/s5/base.c",
+      "build/runs/s5_check/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3b_mnew_reshape_dup/LAGraph_CFPQ_RSM.c",
+      "build/runs/s5_lab/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3b_mnew_reshape_dup/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3b_mnew_reshape_dup/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0_jit/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3b_mnew_reshape_dup/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage1/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3b_mnew_reshape_dup/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_imental_algorithm_cfpq_rsm_lab_build_runs_stage0_src_I1_reshape_inplace_LAGraph_CFPQ_RSM_c_329866454488": {
+    "sha256": "329866454488a4d481afd2741fc3fcaee422ef74be4be74638e337c58224c051",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0/src/I1_reshape_inplace/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0_jit/src/I1_reshape_inplace/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage1/src/I1_reshape_inplace/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0/src/I1_reshape_inplace/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0_jit/src/I1_reshape_inplace/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage1/src/I1_reshape_inplace/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_experimental_algorithm_cfpq_rsm_lab_build_runs_stage0_src_I2_drop_frame_LAGraph_CFPQ_RSM_c_7629d7e5ba0d": {
+    "sha256": "7629d7e5ba0d527cb173b8b083805b2844287c401d8f6dfeeba49361dc3b50de",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0/src/I2_drop_frame/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0_jit/src/I2_drop_frame/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage1/src/I2_drop_frame/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0/src/I2_drop_frame/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0_jit/src/I2_drop_frame/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage1/src/I2_drop_frame/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_mental_algorithm_cfpq_rsm_lab_build_runs_stage0_src_I3_term_static_skip_LAGraph_CFPQ_RSM_c_12d97f23fe79": {
+    "sha256": "12d97f23fe796cfa4a6c4486f99bd770aa77be222172a95a90fd2b2d909ca3bf",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0/src/I3_term_static_skip/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0_jit/src/I3_term_static_skip/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage1/src/I3_term_static_skip/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0/src/I3_term_static_skip/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0_jit/src/I3_term_static_skip/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage1/src/I3_term_static_skip/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_ental_algorithm_cfpq_rsm_lab_build_runs_stage0_src_I4_phase4_delta_mask_LAGraph_CFPQ_RSM_c_0be93a059485": {
+    "sha256": "0be93a05948505a6e8d3f43fa10f8330c7a700a187561fcc38997b254a6c86a7",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0/src/I4_phase4_delta_mask/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0_jit/src/I4_phase4_delta_mask/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage1/src/I4_phase4_delta_mask/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0/src/I4_phase4_delta_mask/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0_jit/src/I4_phase4_delta_mask/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage1/src/I4_phase4_delta_mask/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_m_cfpq_rsm_lab_build_runs_stage0_src_I5_seed_direct_sourcemask_I6_p_dup_LAGraph_CFPQ_RSM_c_8691a3b4dd8e": {
+    "sha256": "8691a3b4dd8ede98314921f243de338a12f78c897f7e8affaa1b906534817493",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0/src/I5_seed_direct_sourcemask+I6_p_dup/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0_jit/src/I5_seed_direct_sourcemask+I6_p_dup/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage1/src/I5_seed_direct_sourcemask+I6_p_dup/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0/src/I5_seed_direct_sourcemask+I6_p_dup/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0_jit/src/I5_seed_direct_sourcemask+I6_p_dup/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage1/src/I5_seed_direct_sourcemask+I6_p_dup/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist__algorithm_cfpq_rsm_lab_build_runs_stage0_src_I5_seed_direct_sourcemask_LAGraph_CFPQ_RSM_c_316cbbb54acf": {
+    "sha256": "316cbbb54acf50537b6a5027cf27722bc4f884dac57f7b7630c6f12154a1d23f",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0/src/I5_seed_direct_sourcemask/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0_jit/src/I5_seed_direct_sourcemask/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage1/src/I5_seed_direct_sourcemask/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0/src/I5_seed_direct_sourcemask/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0_jit/src/I5_seed_direct_sourcemask/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage1/src/I5_seed_direct_sourcemask/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_pq_rsm_lab_build_runs_stage0_src_S1a_shared_shift_S1b_call_direct_accum_LAGraph_CFPQ_RSM_c_2aee0709c07d": {
+    "sha256": "2aee0709c07da4d8b16ca5baee84dc7b722a485b95efd6aff15b39a8a6cdcb95",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0/src/S1a_shared_shift+S1b_call_direct_accum/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0_jit/src/S1a_shared_shift+S1b_call_direct_accum/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage1/src/S1a_shared_shift+S1b_call_direct_accum/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0/src/S1a_shared_shift+S1b_call_direct_accum/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0_jit/src/S1a_shared_shift+S1b_call_direct_accum/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage1/src/S1a_shared_shift+S1b_call_direct_accum/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_d_runs_stage0_src_S1a_shared_shift_S2_return_prefix_w_S2b_w_final_guard_LAGraph_CFPQ_RSM_c_59fca6d67dc1": {
+    "sha256": "59fca6d67dc15765515ecb2bd0a88376e45cd56ced2352e040e0078fd22f7d18",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0/src/S1a_shared_shift+S2_return_prefix_w+S2b_w_final_guard/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0_jit/src/S1a_shared_shift+S2_return_prefix_w+S2b_w_final_guard/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage1/src/S1a_shared_shift+S2_return_prefix_w+S2b_w_final_guard/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0/src/S1a_shared_shift+S2_return_prefix_w+S2b_w_final_guard/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0_jit/src/S1a_shared_shift+S2_return_prefix_w+S2b_w_final_guard/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage1/src/S1a_shared_shift+S2_return_prefix_w+S2b_w_final_guard/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_a_shared_shift_S2_return_prefix_w_S3a_single_acc_S3c_phase5_mask_fusion_LAGraph_CFPQ_RSM_c_0c70fe073ec2": {
+    "sha256": "0c70fe073ec253ed0c2f9ed2ecc9776c6f7253ae9928cf1a2d0841a9bfed66ed",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3c_phase5_mask_fusion/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0_jit/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3c_phase5_mask_fusion/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage1/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3c_phase5_mask_fusion/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage2a/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3c_phase5_mask_fusion/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3c_phase5_mask_fusion/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0_jit/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3c_phase5_mask_fusion/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage1/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3c_phase5_mask_fusion/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage2a/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc+S3c_phase5_mask_fusion/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_uild_runs_stage0_src_S1a_shared_shift_S2_return_prefix_w_S3a_single_acc_LAGraph_CFPQ_RSM_c_10a9218b8804": {
+    "sha256": "10a9218b880458bc4c35eab565a2fc01644577270040ce2feb0945ab989d8d57",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0_jit/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage1/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0_jit/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage1/src/S1a_shared_shift+S2_return_prefix_w+S3a_single_acc/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist__cfpq_rsm_lab_build_runs_stage0_src_S1a_shared_shift_S2_return_prefix_w_LAGraph_CFPQ_RSM_c_bee15e12e2cb": {
+    "sha256": "bee15e12e2cb3f47da1bafc44aa52d8707657b0b0461c3d22a15f55fd6bf12b8",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0/src/S1a_shared_shift+S2_return_prefix_w/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0_jit/src/S1a_shared_shift+S2_return_prefix_w/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage1/src/S1a_shared_shift+S2_return_prefix_w/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0/src/S1a_shared_shift+S2_return_prefix_w/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0_jit/src/S1a_shared_shift+S2_return_prefix_w/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage1/src/S1a_shared_shift+S2_return_prefix_w/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_cfpq_rsm_lab_build_runs_stage0_src_S1a_shared_shift_S4_term_active_rows_LAGraph_CFPQ_RSM_c_60a8dc02785e": {
+    "sha256": "60a8dc02785ec75edc9c6826ac99d203ca9c316ab901bce0978f7cb177a6c6fb",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0/src/S1a_shared_shift+S4_term_active_rows/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0_jit/src/S1a_shared_shift+S4_term_active_rows/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage1/src/S1a_shared_shift+S4_term_active_rows/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage2a/src/S1a_shared_shift+S4_term_active_rows/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage2b/src/S1a_shared_shift+S4_term_active_rows/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage4e/src/S1a_shared_shift+S4_term_active_rows/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0/src/S1a_shared_shift+S4_term_active_rows/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0_jit/src/S1a_shared_shift+S4_term_active_rows/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage1/src/S1a_shared_shift+S4_term_active_rows/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage2a/src/S1a_shared_shift+S4_term_active_rows/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage2b/src/S1a_shared_shift+S4_term_active_rows/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage4e/src/S1a_shared_shift+S4_term_active_rows/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_erimental_algorithm_cfpq_rsm_lab_build_runs_stage0_src_S1a_shared_shift_LAGraph_CFPQ_RSM_c_16b6f3d3d4a5": {
+    "sha256": "16b6f3d3d4a5a813f37cd0da129fb406dd4e87f14423b5f6722916f4103fcc13",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0/src/S1a_shared_shift/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage0_jit/src/S1a_shared_shift/LAGraph_CFPQ_RSM.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage1/src/S1a_shared_shift/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0/src/S1a_shared_shift/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage0_jit/src/S1a_shared_shift/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage1/src/S1a_shared_shift/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_uns_stage2a_src_S1a_shared_shift_S4_term_active_rows_I1_reshape_inplace_LAGraph_CFPQ_RSM_c_4e4fc3ed1b17": {
+    "sha256": "4e4fc3ed1b179f8878a0646d949da738b9c62f92d03676c9bc459532cb6d1c10",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/runs/stage2a/src/S1a_shared_shift+S4_term_active_rows+I1_reshape_inplace/LAGraph_CFPQ_RSM.c",
+      "build/runs/stage2a/src/S1a_shared_shift+S4_term_active_rows+I1_reshape_inplace/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_ive_2026_11_03_evidence_tar_gz_repo_experimental_algorithm_cfpq_rsm_lab_build_s5_post_s6_c_b1e5b88ccb73": {
+    "sha256": "b1e5b88ccb734306a69b4099cedd470081f6e0bafcda630d36ea283e0a161481",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/s5/post_s6.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/s5/pre_s7.c",
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/s6check/LAGraph_CFPQ_RSM.c",
+      "build/s6check/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_ive_2026_11_03_evidence_tar_gz_repo_experimental_algorithm_cfpq_rsm_lab_build_s5_post_s7_c_c92ddce266e7": {
+    "sha256": "c92ddce266e7a0b42b89de86a67ba434290f6d22d5871a5a77c9ba08f7b87d45",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/s5/post_s7.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist__evidence_tar_gz_repo_experimental_algorithm_cfpq_rsm_lab_build_s7check_LAGraph_CFPQ_RSM_c_6cf0d134fca0": {
+    "sha256": "6cf0d134fca00b056f24fa0244c1c374c971a2a4fa928b6f25d94ab0cb3f2b61",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/s7check/LAGraph_CFPQ_RSM.c",
+      "build/s7check/LAGraph_CFPQ_RSM.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_03_evidence_tar_gz_repo_experimental_algorithm_cfpq_rsm_lab_build_verify_variants_ported_c_908d40da6be9": {
+    "sha256": "908d40da6be94e5c481a83744f712e8634ebba58d18221d7a8b5bb8fc274e2b3",
+    "origins": [
+      "archive/2026-11-03/evidence.tar.gz!repo/experimental/algorithm/cfpq_rsm_lab/build/verify/variants/ported.c",
+      "build/verify/variants/ported.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "archive_deepseek_p12": {
+    "sha256": "ba8f2bf8d6987940d8c058bf3266f7e6a982b49be4b530d220103b4dfc90823f",
+    "origins": [
+      "build/deepseek-rXWCtw/patch-02/variants/current.c",
+      "build/deepseek-rXWCtw/patch-03/variants/baseline.c"
+    ],
+    "known_historical_parent": "p1"
+  },
+  "p1": {
+    "sha256": "d586b953e263ae54433a0dcb3623e67a1d5113d28c546d48fe3b9fbdbf90a495",
+    "origins": [
+      "build/deepseek-rXWCtw/patch-01/variants/current.c",
+      "build/deepseek-rXWCtw/patch-02/variants/baseline.c",
+      "rebuilt-active:p1"
+    ],
+    "known_historical_parent": "baseline"
+  },
+  "archive_deepseek_p123": {
+    "sha256": "003d590d18123f40e1008ef5991b0dbe6af66063617080622bc117ada279bca5",
+    "origins": [
+      "build/deepseek-rXWCtw/patch-03/variants/current.c",
+      "build/deepseek-rXWCtw/patch-04/variants/baseline.c"
+    ],
+    "known_historical_parent": "archive_deepseek_p12"
+  },
+  "stack_p1234": {
+    "sha256": "4e3a968535284ba4e38617a10f4003bece3a51832c9bc87009f09cfe4f9c557a",
+    "origins": [
+      "build/deepseek-rXWCtw/final-vs-original/variants/current.c",
+      "build/deepseek-rXWCtw/patch-04/variants/current.c",
+      "rebuilt-active:stack_p1234"
+    ],
+    "known_historical_parent": "archive_deepseek_p123"
+  },
+  "hist_git_d3c4b8f6ac1feb9988df421995ffb7c9fbd87b5e_2ed679bedd62": {
+    "sha256": "2ed679bedd62f53bf45fdb89c1edd39f87faa94664d01deef6027032c3503ce7",
+    "origins": [
+      "git:2c680af998cd9466bb5de2e35722495877a7fc0b",
+      "git:d3c4b8f6ac1feb9988df421995ffb7c9fbd87b5e"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_abf4dee8502aa002c2bc72261ee1f811283c5a1b_13aa28ddb349": {
+    "sha256": "13aa28ddb349e033c01973c7a14fed3686c1bfa6e313af89805d0c5de093744f",
+    "origins": [
+      "git:3b0e377cc0a642ad7ac55affb54e100ab34b468d",
+      "git:abf4dee8502aa002c2bc72261ee1f811283c5a1b"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_e903c10d00413755f13779be4f0514c24f3ee937_c814693362bd": {
+    "sha256": "c814693362bdac52ac3bb120d4b285423b9c86c75402c30f1382726efc737f64",
+    "origins": [
+      "git:ced4a2c86f4b1ee3ebc2f906099412ce6e97bdfa",
+      "git:e903c10d00413755f13779be4f0514c24f3ee937"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_4c5cd1a1062081b62b8962c225c344a3821db401_2c287d34a2b9": {
+    "sha256": "2c287d34a2b9ac780130237bf85684d9c4a64a05ec58414a8d581bca53cdc899",
+    "origins": [
+      "git:4c5cd1a1062081b62b8962c225c344a3821db401"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_0cf18a8f46d7227a41b4a9e84d820e91b371d3e2_6a56111e7029": {
+    "sha256": "6a56111e7029fdfc298203c23b8c4b562fabbc5cc9e34965ff485b9156e99660",
+    "origins": [
+      "git:0cf18a8f46d7227a41b4a9e84d820e91b371d3e2"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_63c4bd05d6f5a7705b51e6cc13f1ea3c85512206_68db2d643796": {
+    "sha256": "68db2d643796af8632c2ccb88ffd9401a3711bab0443bcfffc714c4e692a7a4c",
+    "origins": [
+      "git:63c4bd05d6f5a7705b51e6cc13f1ea3c85512206"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_e34c516341780c42f4fd2c0ff3d3d1acf42efcbf_6e5061ce2bc2": {
+    "sha256": "6e5061ce2bc2c858c191db216eb5dd848fe7acf5d3a487badb00d92b8a735eb9",
+    "origins": [
+      "git:e34c516341780c42f4fd2c0ff3d3d1acf42efcbf"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_3006f72f972ad06f75d91952f78127c72af0c0fe_f11570772fd1": {
+    "sha256": "f11570772fd1115262d476e8128c5724f4297fe1d02807cca69de66371c3c3bb",
+    "origins": [
+      "git:3006f72f972ad06f75d91952f78127c72af0c0fe"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_79ab9a935c6ac8879b49a8901bf0bcb1691a574d_eae421a1d885": {
+    "sha256": "eae421a1d885c900c6d20f9ff280fcfd2cd6a126daa0031c0e11e20d13faabdc",
+    "origins": [
+      "git:79ab9a935c6ac8879b49a8901bf0bcb1691a574d"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_2ab4122e795e2a46c9be2b43102d9a7a8624bfee_86dc09301e53": {
+    "sha256": "86dc09301e536335556a89b91dfcd7c0f8fedcc0fe6c7028992b40ff2a724102",
+    "origins": [
+      "git:2ab4122e795e2a46c9be2b43102d9a7a8624bfee"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_cf39dbc5df4c2a8af471a7703eca73308be9becd_b640aac1bc88": {
+    "sha256": "b640aac1bc88d6170f3934504490e68b442be47b0d8cc4d698d56fe58dcdcb96",
+    "origins": [
+      "git:cf39dbc5df4c2a8af471a7703eca73308be9becd"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_aa9d8e31b0b71fb3e7029f61669e254a5d50b7f0_68449f5d4156": {
+    "sha256": "68449f5d4156c01fc3091c0877d5b633c45602c15972593987730d6047be0e2d",
+    "origins": [
+      "git:aa9d8e31b0b71fb3e7029f61669e254a5d50b7f0"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_f94ad202445d0f2c121beea01403fd227a45b074_24425622bda4": {
+    "sha256": "24425622bda46ac9f0e8009e1c866aa2722b5ce8f9d65d4c2983379c505c97bf",
+    "origins": [
+      "git:7ec7306f434cb25819a1f85e330451157b846e23",
+      "git:f94ad202445d0f2c121beea01403fd227a45b074"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_e5cbb944339e9ce290720f983da8cd6695e650a3_8826a1ea6f93": {
+    "sha256": "8826a1ea6f9355c235af7b346cd18660ff6dac8d1e177013401d8065d7c6f8fd",
+    "origins": [
+      "git:e5cbb944339e9ce290720f983da8cd6695e650a3"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_e7f0b951b07cff04b86e1334229b62f1a777e3fe_b547e2a6defd": {
+    "sha256": "b547e2a6defd849a978463578a6781bac2a2ef85f24008735dfb802c59189169",
+    "origins": [
+      "git:e7f0b951b07cff04b86e1334229b62f1a777e3fe"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_f78d9c8d1a471def1324140c1752b8084691e0e0_40cffe2c7c9c": {
+    "sha256": "40cffe2c7c9c724bad642b845cbb7f4ab1ce97bcc10b4e15520fc14b2ded0052",
+    "origins": [
+      "git:f78d9c8d1a471def1324140c1752b8084691e0e0"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_35bee56067b09a3e0338723058246683afdefa74_5581807a2932": {
+    "sha256": "5581807a293295cd7f8b5078f7018e8801da26e641d5f70a413921b4337d7ac0",
+    "origins": [
+      "git:35bee56067b09a3e0338723058246683afdefa74"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_1672b7a16a1c7ff97d292a289ae477188dbaafc4_35719cf4af3b": {
+    "sha256": "35719cf4af3bdfd8e9c04df5550d66154d8cf5be4e06add1a413d83698e59ed2",
+    "origins": [
+      "git:1672b7a16a1c7ff97d292a289ae477188dbaafc4",
+      "git:c9efb510a07e599a4a1514de6056540760ff3c4e"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_fca24cacdeef5efa01cb7bc857f9c1d328cd0802_8e50bf55bb6c": {
+    "sha256": "8e50bf55bb6c9a7bebc60bc9eef9b5266be2a99a031a3b2fba0ae5b89744750f",
+    "origins": [
+      "git:fca24cacdeef5efa01cb7bc857f9c1d328cd0802"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_530be6c9b0775ea4ee361fe10bd9ced36f51da09_0a93e588c2c2": {
+    "sha256": "0a93e588c2c2dabcfcaba81d2acbc72333ed90a72a3103ec76789b8318b12e5a",
+    "origins": [
+      "git:530be6c9b0775ea4ee361fe10bd9ced36f51da09"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "hist_git_f4581377a504bf3d04e2793720ddb3b003591e84_93b2423cc476": {
+    "sha256": "93b2423cc476ce98228b72f13eb9afd315f0448b9b493946d733b0c507133a9d",
+    "origins": [
+      "git:f4581377a504bf3d04e2793720ddb3b003591e84"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "p2": {
+    "sha256": "791520ee778c6386d3cd7462cd4ff65329634a6992790599fa55fe1067de10df",
+    "origins": [
+      "rebuilt-active:p2"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "p3": {
+    "sha256": "2c17d032db6d978b1ea82016d19262eed8ba597b10b7044e5b06a04deeada132",
+    "origins": [
+      "rebuilt-active:p3"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "p4": {
+    "sha256": "0fe833ec9687a557dc235a44a02cca613b648f472047fb4e70707c12faf21b9f",
+    "origins": [
+      "rebuilt-active:p4"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "archive_r13_current": {
+    "sha256": "c7efb94f21bbbddc220ab8371d01cd4c852e3ab110d5942367932676f8916928",
+    "origins": [
+      "retired variants/compare_bb7_current/current.c"
+    ],
+    "known_historical_parent": "unknown"
+  },
+  "p1_review": {
+    "sha256": "1c5ad06ef8558104c9c6f66a90e63aea50f7e187aedaa3a47630b3650a44da3f",
+    "origins": [
+      "variants/active/p1_review__1c5ad06ef855.c"
+    ],
+    "known_historical_parent": "p1",
+    "derivation": "Review polish of standalone p1; baseline-relative patch; original snapshot preserved."
+  },
+  "p2_review": {
+    "sha256": "dc0f7c50405bd2cb1ee3d2b9aa7407eecd88bbdcf4318a9e81b05e2bc85e9270",
+    "origins": [
+      "variants/active/p2_review__dc0f7c50405b.c"
+    ],
+    "known_historical_parent": "p2",
+    "derivation": "Review polish of standalone p2; baseline-relative patch; original snapshot preserved."
+  },
+  "p3_review": {
+    "sha256": "35109ff0c008ba62b095c1500a7df6d1111e505be8dd636dec2e89831a0857b0",
+    "origins": [
+      "variants/active/p3_review__35109ff0c008.c"
+    ],
+    "known_historical_parent": "p3",
+    "derivation": "Review polish of standalone p3; baseline-relative patch; original snapshot preserved."
+  },
+  "p4_review": {
+    "sha256": "7eefac364098f9f1d6ae353962d4d9baf7be9ed1d96a30160e4698871a671823",
+    "origins": [
+      "variants/active/p4_review__7eefac364098.c"
+    ],
+    "known_historical_parent": "p4",
+    "derivation": "Review polish of standalone p4; baseline-relative patch; original snapshot preserved."
+  }
+}

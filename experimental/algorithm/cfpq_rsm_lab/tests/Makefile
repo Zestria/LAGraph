@@ -1,8 +1,8 @@
 # cfpq_rsm_lab/tests/Makefile: isolated candidate build for DS-00 regressions
 #
-# Every binary here links exactly one CFPQ RSM translation unit (the candidate
-# variants/correctness.c, the unchanged parent LAGraph_CFPQ_RSM.c, or a future
-# variant), not the installed liblagraphx.  The LAGraph/GraphBLAS shared
+# Every binary here links exactly one CFPQ RSM translation unit (the current
+# production source by default, or a CANDIDATE/R2 override), not the installed
+# liblagraphx. The LAGraph/GraphBLAS shared
 # libraries come from the checkout build tree so the headers and libraries are
 # the same revision.
 #
@@ -10,7 +10,7 @@
 #   make check            # deterministic regressions + 200 randomized cases
 #   make check-cases N=500
 #   make existing         # existing experimental/test/test_CFPQ_RSM.c on the candidate
-#   make production       # same regressions on the unchanged parent (negative control)
+#   make production       # same regressions on the production source
 #   make alloc            # allocation-failure sweep on the candidate
 #   make asan             # sanitizer build of the candidate + fast regressions
 #
@@ -30,9 +30,9 @@ RPATHS     := -Wl,-rpath,$(abspath $(BUILD)/src) -Wl,-rpath,$(abspath $(BUILD)/s
               -Wl,-rpath,$(GRAPHBLAS_LIBDIR)
 LDLIBS     := -llagraph -llagraphtest -lgraphblas -lm
 
-CANDIDATE  := $(LAB)/variants/correctness.c
-R2         := $(LAB)/variants/correctness_r2.c
 PARENT     := $(LAB)/../LAGraph_CFPQ_RSM.c
+CANDIDATE  ?= $(PARENT)
+R2         ?= $(PARENT)
 TEST_SRC   := test_ds00.c oracle.c
 
 BIN_DIR    := ../build/tests
@@ -44,11 +44,11 @@ all: dirs candidate_correctness_r2 existing_candidate_r2
 dirs:
 	@mkdir -p $(BIN_DIR)
 
-# R1 candidate, retained for historical evidence (DS-00-001)
+# Candidate override retained for historical experiments.
 candidate_correctness: dirs $(CANDIDATE) $(TEST_SRC) oracle.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $(BIN_DIR)/$@ $(CANDIDATE) $(TEST_SRC) $(LDPATHS) $(RPATHS) $(LDLIBS)
 
-# R2 revised reference (DS-00-R2): input shape validation and documented contract
+# Current production source unless R2 selects a frozen reference/variant.
 candidate_correctness_r2: dirs $(R2) $(TEST_SRC) oracle.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $(BIN_DIR)/$@ $(R2) $(TEST_SRC) $(LDPATHS) $(RPATHS) $(LDLIBS)
 
@@ -68,10 +68,11 @@ candidate_asan: dirs $(CANDIDATE) $(TEST_SRC) oracle.h
 	$(CC) -O1 -g -std=c11 -fsanitize=address,undefined -fno-omit-frame-pointer \
 	    $(INCLUDES) -o $(BIN_DIR)/$@ $(CANDIDATE) $(TEST_SRC) $(LDPATHS) $(RPATHS) $(LDLIBS)
 
-# profiling build of the frozen R2 reference (generated from it by
-# tests/make_profile_variant.py); used to verify the instrumented build
-candidate_profile_r2: dirs $(LAB)/variants/correctness_profile.c $(TEST_SRC) oracle.h
-	$(CC) $(CFLAGS) -DCFPQ_RSM_PROFILE $(INCLUDES) -o $(BIN_DIR)/$@ $(LAB)/variants/correctness_profile.c $(TEST_SRC) $(LDPATHS) $(RPATHS) $(LDLIBS)
+# Generate the profiling source from the same selected input; never rely on a
+# missing or stale variants/correctness_profile.c snapshot.
+candidate_profile_r2: dirs $(R2) make_profile_variant.py $(LAB)/variants/cfpq_profile.h $(TEST_SRC) oracle.h
+	python3 make_profile_variant.py $(R2) $(BIN_DIR)/correctness_profile.c
+	$(CC) $(CFLAGS) -DCFPQ_RSM_PROFILE $(INCLUDES) -I$(LAB)/variants -o $(BIN_DIR)/$@ $(BIN_DIR)/correctness_profile.c $(TEST_SRC) $(LDPATHS) $(RPATHS) $(LDLIBS)
 
 candidate_asan_r2: dirs $(R2) $(TEST_SRC) oracle.h
 	$(CC) -O1 -g -std=c11 -fsanitize=address,undefined -fno-omit-frame-pointer \
@@ -87,7 +88,7 @@ existing: existing_candidate_r2
 	$(BIN_DIR)/existing_candidate_r2
 
 production: production_control
-	-$(BIN_DIR)/production_control --no-random
+	$(BIN_DIR)/production_control --no-random
 
 alloc: candidate_correctness_r2
 	$(BIN_DIR)/candidate_correctness_r2 --alloc-sweep

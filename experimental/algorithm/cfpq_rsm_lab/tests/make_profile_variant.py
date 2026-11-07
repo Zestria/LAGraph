@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Generate the profiling variant of the corrected reference for DS-01-R2.
+"""Generate a profiling variant of the current RSM or corrected DS-01 reference.
 
-`variants/correctness_r2.c` is the frozen DS-00-R2 reference; this generator
-adds only `#ifdef CFPQ_RSM_PROFILE` hooks.  Compiling the generated file
-without that macro reproduces the reference (verified by the DS-00 harness).
+This generator adds only `#ifdef CFPQ_RSM_PROFILE` hooks to the supplied source.
+Compiling without that macro reproduces the input algorithm. The registered baseline and all active standalone/cumulative snapshots are supported.
 The generator asserts every anchor occurs exactly once, so reference changes
 cannot silently produce a stale profile variant.
 
@@ -639,11 +638,11 @@ EDITS: list[tuple[str, str]] = [
 ]
 
 HEADER = """//------------------------------------------------------------------------------
-// cfpq_rsm_lab/variants/correctness_profile.c: generated profiling variant
+// cfpq_rsm_lab/runs/<run>/profile/src: generated profiling variant
 //------------------------------------------------------------------------------
 //
-// Generated from variants/correctness_r2.c (the frozen DS-00-R2 reference) by
-// tests/make_profile_variant.py.  Do not edit by hand; regenerate instead.
+// Generated from the supplied RSM source by tests/make_profile_variant.py.
+// Do not edit by hand; regenerate instead.
 // The only additions are CFPQ_RSM_PROFILE hooks.  Compile without that macro
 // to reproduce the reference behavior; timing builds use the reference source
 // directly and never contain this instrumentation.
@@ -657,22 +656,318 @@ HEADER = """//------------------------------------------------------------------
 """
 
 
+def profile_edits(source: str) -> list[tuple[str, str]]:
+    """Select hooks for the legacy products or optimized tuple-call layout.
+
+    Use shared statement/phase boundaries instead of obsolete comment prose.
+    Every selected anchor is still required exactly once by instrument().
+    """
+    edits = list(EDITS)
+    # Cleanup no longer depends on the removed rsm_start array.
+    free_w = next((line for line in source.splitlines(keepends=True)
+                   if "FREE_GRB_MATRIX_ARRAY(W, num_nonterm);" in line), None)
+    if free_w is None:
+        raise SystemExit("missing anchor 'legacy W cleanup' (anchor occurs 0 times, expected 1)")
+    edits[4] = (free_w, free_w +
+                "        CFPQ_PROF_FREE_WORK();                                                                     \\\n")
+    for index, anchor in ((9, "    // each source s starts a call"),
+                          (13, "        // Phase 1:"),
+                          (25, "        // Phase 4:")):
+        edits[index] = (anchor, edits[index][1][edits[index][1].index("#ifdef"):])
+    old, new = edits[11]
+    edits[11] = (old.split("\n        //", 1)[0], new.rsplit("\n        //", 1)[0])
+    edits[26] = tuple(s.replace("return transitions.", "return transitions") for s in edits[26])
+    old, new = edits[35]
+    edits[35] = tuple(s.replace(old, "        // Phase 5: M_new") for s in (old, new))
+
+    # The optimized implementation removed the activity-vector clear.
+    if "GrB_Vector_clear(rowvec)" not in source:
+        edits[12] = ("", "")
+
+    if "bool acc_empty = true;" in source:
+        # All optimized products use pattern-only Boolean multiplication.
+        edits = [(old.replace("GrB_LOR_LAND_SEMIRING_BOOL", "GxB_ANY_PAIR_BOOL"),
+                  new.replace("GrB_LOR_LAND_SEMIRING_BOOL", "GxB_ANY_PAIR_BOOL"))
+                 for old, new in edits]
+        for before, after in (
+            ("s_mul_acc(acc, scratch, graph_term[i], s_temp)",
+             "s_mul_acc(&acc, &s_temp, scratch, graph_term[i], &acc_empty)"),
+            ("s_mul_acc(acc, scratch, graph_nt[i], s_temp)",
+             "s_mul_acc(&acc, &s_temp, scratch, graph_nt[i], &acc_empty)"),
+            ("s_mul_acc(acc, W[i], new_edges, s_temp)",
+             "s_mul_acc(&acc, &s_temp, W[i], new_edges, &acc_empty)"),
+        ):
+            edits = [(old.replace(before, after), new.replace(before, after))
+                     for old, new in edits]
+
+        # The product temporary is passed by pointer and can swap with acc.
+        product = "    H_TRY(GrB_mxm(*T, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL, A, B, GrB_NULL));"
+        hook = edits[2][1][edits[2][1].index("    H_TRY(GrB_mxm"):]
+        hook = hook.replace("GrB_mxm(T,", "GrB_mxm(*T,")
+        hook = hook.replace("(&prof_st_n, T)", "(&prof_st_n, *T)")
+        clear = "    H_TRY(GrB_Matrix_clear(*T));\n"
+        if clear in source:
+            edits[2] = (clear + product,
+                        "#ifdef CFPQ_RSM_PROFILE\n    g_prof.clears++;\n#endif\n" + clear + hook)
+        else:
+            edits[2] = (product, hook)
+
+        call = "            LG_TRY(s_mul_acc(&acc, &s_temp, scratch, graph_term[i], &acc_empty));\n"
+        if "            if (tn > 0)\n" not in source:
+            edits[17] = (call, call +
+                         "#ifdef CFPQ_RSM_PROFILE\n            prof->term_product++;\n#endif\n")
+
+        # Tuple extraction replaces the old diagonal/reshape/call mxm chain.
+        anchor = "                // skip over nonterminal i using the summary edges"
+        edits[22] = (anchor,
+                     "#ifdef CFPQ_RSM_PROFILE\n"
+                     "                prof->callconstr_s += cfpq_prof_now() - prof_sub_t;\n"
+                     "#endif\n" + anchor)
+        build = ("            GRB_TRY(GrB_Matrix_build_BOOL(M_call, call_i, call_j, call_x, call_count,\n"
+                 "                                          GrB_LOR));\n")
+        edits.append((build,
+                      "#ifdef CFPQ_RSM_PROFILE\n            prof_sub_t = cfpq_prof_now();\n#endif\n" +
+                      build + "#ifdef CFPQ_RSM_PROFILE\n"
+                      "            prof->callconstr_s += cfpq_prof_now() - prof_sub_t;\n#endif\n"))
+    return [(old, new) for old, new in edits if old]
+
+
+def instrument_legacy(source: str) -> str:
+    s = source
+    for old, new in profile_edits(source):
+        count = s.count(old)
+        if count != 1:
+            raise SystemExit(f"anchor occurs {count} times, expected 1:\n{old[:240]!r}")
+        s = s.replace(old, new)
+    # The production file starts with cleanup macros; keep its first line.
+    return HEADER + s
+
+
+# The active family uses semantic phase boundaries and balanced C function
+# bodies. Whitespace/comment wording inside a statement is not an anchor.
+import re
+
+
+def _one(pattern: str, source: str, label: str):
+    matches = list(re.finditer(pattern, source, re.M | re.S))
+    if len(matches) != 1:
+        raise SystemExit(f"missing/ambiguous anchor '{label}' (anchor occurs {len(matches)} times, expected 1)")
+    return matches[0]
+
+
+def _mask_c(source: str) -> str:
+    # Preserve offsets while hiding comments, strings and character literals.
+    return re.sub(r'/\*.*?\*/|//[^\n]*|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'',
+                  lambda m: re.sub(r'[^\n]', ' ', m.group()), source, flags=re.S)
+
+
+def _profile_returns(part: str, field: str, counter: str) -> str:
+    matches = list(re.finditer(r'\breturn\s+([^;]+);', _mask_c(part)))
+    for m in reversed(matches):
+        expr = part[m.start(1):m.end(1)]
+        part = part[:m.start()] + f'CFPQ_PROFILE_RETURN(prof_fn_t, {field}, {counter}, ({expr}));' + part[m.end():]
+    return part
+
+
+def _body(source: str, name: str):
+    masked = _mask_c(source)
+    m = _one(r'\b(?:static\s+)?(?:inline\s+)?(?:int|GrB_Info)\s+' + re.escape(name) +
+             r'\s*\([^;{}]*\)\s*\{', masked, 'function ' + name)
+    begin = m.end() - 1
+    depth = 1
+    for end in range(begin + 1, len(masked)):
+        depth += (masked[end] == '{') - (masked[end] == '}')
+        if depth == 0:
+            return begin, end
+    raise SystemExit(f"missing anchor 'closing brace of {name}'")
+
+
+def _hook(text: str) -> str:
+    return '\n#ifdef CFPQ_RSM_PROFILE\n' + text + '\n#endif\n'
+
+
+def instrument_active(source: str) -> str:
+    begin, end = _body(source, 'LAGraph_CFPQ_RSM')
+    body = source[begin + 1:end]
+    def replace(pattern, replacement, label):
+        nonlocal body
+        m = _one(pattern, body, label)
+        body = body[:m.start()] + replacement(m) + body[m.end():]
+    replace(r'\bLG_CLEAR_MSG\s*;', lambda m: m.group() + _hook('''
+    cfpq_prof *prof = &g_prof;
+    cfpq_prof_init(prof);
+    double prof_call_t0 = cfpq_prof_now(), prof_phase_t = 0, prof_final_t = 0;
+    bool prof_final_started = false;
+'''), 'kernel entry LG_CLEAR_MSG')
+    replace(r'GrB_Index\s+Q\s*=\s*rsm->state_count\s*;',
+            lambda m: m.group() + _hook('prof->q = Q; prof->v = V; prof->nsources = num_sources;'),
+            'original state count')
+    loop = _one(r'while\s*\(\s*m_nvals\s*>\s*0\s*\)\s*\{', body, 'frontier loop')
+    body = body[:loop.start()] + _hook('prof->setup_s = cfpq_prof_now() - prof_call_t0;') + body[loop.start():loop.end()] + _hook('''
+        prof->iters++;
+        prof_phase_t = cfpq_prof_now();
+        GrB_Index prof_pn = 0;
+        GrB_Matrix_nvals(&prof_pn, P);
+        prof->sum_m += m_nvals; prof->sum_p += prof_pn;
+        if (m_nvals > prof->max_m) prof->max_m = m_nvals;
+        if (prof_pn > prof->max_p) prof->max_p = prof_pn;
+        uint64_t prof_slot = prof->iters - 1;
+        if (prof_slot < CFPQ_PROF_MAX_ITER) {
+            prof->iter_in_m[prof_slot] = m_nvals; prof->iter_p_before[prof_slot] = prof_pn;
+        } else { prof->detail_truncated = true; }
+''') + body[loop.end():]
+    phase_patterns = [r'^[ \t]*//\s*Phase\s+1\b[^\n]*',
+                      r'^[ \t]*//\s*Phases?\s+2\s*\+\s*3\b[^\n]*',
+                      r'^[ \t]*//\s*Phase\s+4\b[^\n]*',
+                      r'^[ \t]*//\s*Phase\s+5\b[^\n]*']
+    for pattern, previous, boundary in zip(phase_patterns,
+            ['activity_s','phase1_s','phase2_3_s','phase4_s'],
+            [None,'boundary_p1_s','boundary_p2_3_s','boundary_p4_s']):
+        code = f'        prof->{previous} += cfpq_prof_now() - prof_phase_t;\n'
+        if boundary:
+            code += f'''        double prof_wait_{previous} = cfpq_prof_now();
+        GrB_Matrix_wait(acc, GrB_MATERIALIZE);
+        prof->{boundary} += cfpq_prof_now() - prof_wait_{previous};
+'''
+        if previous == 'phase2_3_s':
+            code += '        GrB_Matrix_wait(M_call, GrB_MATERIALIZE);\n'
+            if 'S_WaitBox *waitboxes' in body:
+                code += '        for (size_t a=0; a<num_nonterm; ++a) if (waitboxes[a].w != GrB_NULL) GrB_Matrix_wait(waitboxes[a].w, GrB_MATERIALIZE);\n'
+            else:
+                code += '        for (size_t a=0; a<num_nonterm; ++a) if (W[a] != GrB_NULL) GrB_Matrix_wait(W[a], GrB_MATERIALIZE);\n'
+        if previous == 'phase4_s':
+            code += '        for (size_t a=0; a<num_nonterm; ++a) GrB_Matrix_wait(graph_nt[a], GrB_MATERIALIZE);\n'
+        if boundary:
+            line = f'        prof->{boundary} += cfpq_prof_now() - prof_wait_{previous};\n'
+            code = code.replace(line, '') + line
+        code += '        prof_phase_t = cfpq_prof_now();'
+        replace(pattern, lambda m,c=code: _hook(c)+m.group(), previous+' boundary')
+    # Capture the last frontier query, not the initial query before the loop.
+    queries=list(re.finditer(r'GRB_TRY\s*\(\s*GrB_Matrix_nvals\s*\(\s*&m_nvals\s*,\s*M\s*\)\s*\)\s*;',body))
+    if not queries:raise SystemExit("missing anchor 'frontier completion query'")
+    m=queries[-1]
+    body=body[:m.end()]+_hook('''
+        prof->phase5_s += cfpq_prof_now() - prof_phase_t;
+        double prof_wait_p5 = cfpq_prof_now();
+        GrB_Matrix_wait(M, GrB_MATERIALIZE); GrB_Matrix_wait(P, GrB_MATERIALIZE);
+        prof->boundary_p5_s += cfpq_prof_now() - prof_wait_p5;
+        prof->sum_next += m_nvals;
+        if (m_nvals > prof->max_next) prof->max_next = m_nvals;
+        if (prof_slot < CFPQ_PROF_MAX_ITER) {
+            GrB_Index pn=0; GrB_Matrix_nvals(&pn,P);
+            prof->iter_next[prof_slot]=m_nvals; prof->iter_p_after[prof_slot]=pn;
+        }
+''')+body[m.end():]
+    replace(r'^[ \t]*//\s*reachable\(w\)[^\n]*',lambda m:_hook('''
+    prof_final_t = cfpq_prof_now(); prof_final_started = true;
+''')+m.group(),'final reachable projection')
+    replace(r'GRB_TRY\s*\(\s*GrB_Matrix_build_BOOL\s*\(\s*M_call\s*,[^;]*?\)\s*\)\s*;',
+            lambda m:_hook('double prof_call_build_t = cfpq_prof_now();')+m.group()+_hook('prof->callconstr_s += cfpq_prof_now() - prof_call_build_t;'),
+            'bulk call build')
+    local_wait = 'S_WaitBox *waitboxes' in body
+    old_wait = bool(re.search(r'GrB_Matrix\s*\*W\s*=',body))
+    snapshots='''
+    prof->compact_q = Q; prof->nterm = num_term; prof->nnonterm = num_nonterm;
+    cfpq_prof_snapshot(prof, M, P, acc, scratch, s_temp, new_edges,
+                       GrB_NULL, GrB_NULL, GrB_NULL, entry_vec, source_mask, rowvec,
+                       '''+('W' if old_wait else 'NULL')+''', graph_nt, num_nonterm);
+'''
+    if local_wait:
+        snapshots+='''
+    if (prof->enabled && waitboxes != NULL) for (size_t a = 0; a < num_nonterm; ++a) {
+        char name[80];
+        prof->waiting_blocks += waitboxes[a].d;
+'''
+        for field in ('route','x','w','p'):
+            snapshots+=f'        snprintf(name, sizeof(name), "wait[%zu].{field}", a); cfpq_prof_matrix(prof->matrix, prof->tag, prof->call_id, name, waitboxes[a].{field});\n'
+        if 'S_Fuse *fuse' in source:
+            snapshots+='        for (GrB_Index l = 0; l < waitboxes[a].d; ++l) if (waitboxes[a].fuse[l].fused) prof->fused_blocks++;\n'
+        snapshots+='    }\n'
+    if 'S_GroupSet groupset' in body:
+        snapshots+='''
+    if (prof->enabled) for (size_t a = 0; a < groupset.ngroups; ++a) {
+        char name[80]; prof->group_count++; prof->group_columns += groupset.groups[a].ncols;
+        snprintf(name, sizeof(name), "group[%zu].inc", a); cfpq_prof_matrix(prof->matrix, prof->tag, prof->call_id, name, groupset.groups[a].inc);
+        snprintf(name, sizeof(name), "group[%zu].tmp", a); cfpq_prof_matrix(prof->matrix, prof->tag, prof->call_id, name, groupset.groups[a].tmp);
+    }
+'''
+    if re.search(r'S_(?:WaitBox|FusionBox)\s*\*fusion_boxes', body):
+        snapshots+='''
+    if (prof->enabled && fusion_boxes != NULL) for (size_t a = 0; a < num_nonterm; ++a)
+        for (GrB_Index l = 0; l < fusion_boxes[a].d; ++l) if (fusion_boxes[a].fuse[l].fused) prof->fused_blocks++;
+'''
+    for name in ('gbuild','fscratch','dprod','bblk','bprod','rprod'):
+        if re.search(r'\b'+name+r'\b',body):
+            snapshots+=f'    if (prof->enabled) cfpq_prof_matrix(prof->matrix, prof->tag, prof->call_id, "{name}", {name});\n'
+    # There can be an early success for an empty trimmed language.
+    pattern=r'(?P<indent>^[ \t]*)LG_FREE_WORK\s*;\s*return\s+GrB_SUCCESS\s*;'
+    successes=list(re.finditer(pattern,body,re.M))
+    if not successes:raise SystemExit("missing anchor 'success cleanup'")
+    for m in reversed(successes):
+        code='''
+    if (prof_final_started) {
+        prof->final_s = cfpq_prof_now() - prof_final_t;
+    } else { prof->setup_s = cfpq_prof_now() - prof_call_t0; }
+    double prof_materialize_t = cfpq_prof_now();
+    GrB_Vector_wait(*reachable, GrB_MATERIALIZE);
+    prof->materialize_s = cfpq_prof_now() - prof_materialize_t;
+    double prof_diag_before = prof->diag_io_s;
+    double prof_snapshot_t = cfpq_prof_now();
+'''+snapshots+'''
+    prof->diag_io_s = prof_diag_before + cfpq_prof_now() - prof_snapshot_t;
+    double prof_cleanup_t = cfpq_prof_now();
+'''
+        body=body[:m.start()]+_hook(code)+'\n'+m['indent']+'LG_FREE_WORK;'+_hook('cfpq_prof_emit(prof, cfpq_prof_now() - prof_call_t0, cfpq_prof_now() - prof_cleanup_t);')+'\n'+m['indent']+'return GrB_SUCCESS;'+body[m.end():]
+    result=source[:begin+1]+body+source[end:]
+    # Per-operation helper timings are nested subsets, never added to phase totals.
+    for name,field,counter in [('s_apply_groups','grouped_s','grouped_calls'),
+                               ('s_build_groups','group_setup_s','group_setup_calls'),
+                               ('s_compact_build','compaction_s','compaction_calls'),
+                               ('s_waitboxes_init','routing_setup_s','routing_setup_calls'),
+                               ('s_shift_compact','routing_s','routing_calls'),
+                               ('s_scatter_local','routing_s','routing_calls'),
+                               ('s_build_fusion','fusion_setup_s','fusion_setup_calls'),
+                               ('s_scatter_fused','fusion_s','fusion_calls')]:
+        if not re.search(r'\bstatic\s+GrB_Info\s+'+name+r'\b',result):continue
+        a,b=_body(result,name)
+        part=result[a+1:b]
+        part=_profile_returns(part,field,counter)
+        result=result[:a+1]+_hook('double prof_fn_t = cfpq_prof_now();')+part+result[b:]
+    header='''
+#ifdef CFPQ_RSM_PROFILE
+#include "cfpq_profile.h"
+static cfpq_prof g_prof;
+#define CFPQ_PROFILE_ABORT() cfpq_prof_abort(&g_prof)
+#define CFPQ_PROFILE_RETURN(t, field, counter, value) do { \\
+    g_prof.field += cfpq_prof_now() - (t); g_prof.counter++; return (value); } while (0)
+#else
+#define CFPQ_PROFILE_ABORT() ((void)0)
+#define CFPQ_PROFILE_RETURN(t, field, counter, value) return (value)
+#endif
+'''
+    # Abort open diagnostic streams through the existing error cleanup macro.
+    result=result.replace('LG_FREE_WORK;'+(' '*78)+'\\','LG_FREE_WORK;'+(' '*78)+'\\')
+    m=_one(r'(#define\s+LG_FREE_ALL\b[^#]*?)(if\s*\(reachable\s*!=\s*NULL\))',result,'error cleanup')
+    result=result[:m.start(2)]+'CFPQ_PROFILE_ABORT(); \\\n        '+result[m.start(2):]
+    return HEADER+header+result
+
+
+def instrument(source: str) -> str:
+    if 'bool acc_empty' in source:
+        return instrument_active(source)
+    try:
+        return instrument_legacy(source)
+    except StopIteration as error:
+        raise SystemExit("missing anchor 'legacy source layout'") from error
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print(__doc__)
         return 2
     src = Path(sys.argv[1])
     out = Path(sys.argv[2])
-    s = src.read_text()
-    for old, new in EDITS:
-        count = s.count(old)
-        if count != 1:
-            raise SystemExit(f"anchor occurs {count} times, expected 1:\n{old[:240]!r}")
-        s = s.replace(old, new)
-    lines = s.splitlines(keepends=True)
-    if not lines[0].startswith("//---"):
-        raise SystemExit("unexpected reference header")
-    out.write_text(HEADER + "".join(lines[1:]))
+    out.write_text(instrument(src.read_text()))
     print(f"wrote {out} ({len(out.read_text().splitlines())} lines)")
     return 0
 

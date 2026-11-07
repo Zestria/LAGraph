@@ -1,0 +1,60 @@
+--- a/experimental/algorithm/LAGraph_CFPQ_RSM.c
++++ b/experimental/algorithm/LAGraph_CFPQ_RSM.c
+@@ -104,6 +104,17 @@
+     return GrB_SUCCESS;
+ }
+ 
++// DS-20: set column storage with hypersparse control.  GxB_Matrix_reshape keeps
++// the storage orientation but resets the sparsity-control hint to automatic, so
++// it is re-applied after every reshape of new_edges below.  W[i] is never
++// reshaped, and in-place updates keep their output matrix's options.
++static GrB_Info s_set_col_hypersparse(GrB_Matrix A)
++{
++    H_TRY(GrB_Matrix_set_INT32(A, GxB_BY_COL, GxB_FORMAT));
++    H_TRY(GrB_Matrix_set_INT32(A, GxB_HYPERSPARSE, GxB_SPARSITY_CONTROL));
++    return GrB_SUCCESS;
++}
++
+ #undef H_TRY
+ 
+ typedef struct
+@@ -258,6 +269,7 @@
+             continue;
+ 
+         GRB_TRY(GrB_Matrix_new(&W[i], GrB_BOOL, Q * V, V));
++        GRB_TRY(s_set_col_hypersparse(W[i]));
+         GRB_TRY(GrB_Matrix_new(&rsm_start[i], GrB_BOOL, Q, 1));
+         GRB_TRY(GrB_Matrix_setElement_BOOL(rsm_start[i], true, start_states[i], 0));
+     }
+@@ -269,6 +281,7 @@
+     GRB_TRY(GrB_Matrix_new(&scratch, GrB_BOOL, Q, V * V));
+     GRB_TRY(GrB_Matrix_new(&s_temp, GrB_BOOL, Q * V, V));
+     GRB_TRY(GrB_Matrix_new(&new_edges, GrB_BOOL, 1, V * V));
++    GRB_TRY(s_set_col_hypersparse(new_edges));
+     // there is no need to create matrix for diag_entry
+     GRB_TRY(GrB_Vector_new(&entry_vec, GrB_BOOL, V));
+     GRB_TRY(GrB_Vector_new(&source_mask, GrB_BOOL, V));
+@@ -416,6 +429,7 @@
+                 continue;
+ 
+             GRB_TRY(GxB_Matrix_reshape(new_edges, false, V, V, GrB_NULL));
++            GRB_TRY(s_set_col_hypersparse(new_edges));
+ 
+             // dG = new_edges \ graph_nt[i]
+             GrB_Index gnt_nvals = 0;
+@@ -428,6 +442,7 @@
+                 if (ne_vals == 0)
+                 {
+                     GRB_TRY(GxB_Matrix_reshape(new_edges, false, 1, V*V, GrB_NULL));
++                    GRB_TRY(s_set_col_hypersparse(new_edges));
+                     continue;
+                 }
+             }
+@@ -445,6 +460,7 @@
+             }
+ 
+             GRB_TRY(GxB_Matrix_reshape(new_edges, false, 1, V * V, GrB_NULL));
++            GRB_TRY(s_set_col_hypersparse(new_edges));
+         }
+ 
+         // Phase 5: M_new = (reshape(acc) | M_call) \ P

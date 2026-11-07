@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "id": "cfpq-standalone-validation-2026-11-07",
+  "title": "Common-baseline standalone patches and cumulative-stack validation",
+  "variants": {
+    "baseline": "c7efb94f21bbbddc220ab8371d01cd4c852e3ab110d5942367932676f8916928",
+    "p1": "d586b953e263ae54433a0dcb3623e67a1d5113d28c546d48fe3b9fbdbf90a495",
+    "p2": "791520ee778c6386d3cd7462cd4ff65329634a6992790599fa55fe1067de10df",
+    "p3": "2c17d032db6d978b1ea82016d19262eed8ba597b10b7044e5b06a04deeada132",
+    "p4": "0fe833ec9687a557dc235a44a02cca613b648f472047fb4e70707c12faf21b9f",
+    "stack_p1234": "4e3a968535284ba4e38617a10f4003bece3a51832c9bc87009f09cfe4f9c557a"
+  },
+  "validation_plan": {
+    "oracle_existing": {
+      "generated_cases": 200,
+      "seed": 2026,
+      "existing_tests": 10
+    },
+    "timing_smoke": {
+      "recipe": "smoke"
+    },
+    "reduced": {
+      "config": "/home/hollow/repo/CFG_bench/tests/data/configs/all.csv",
+      "timeout_seconds": 60
+    },
+    "profile_smoke": {
+      "recipe": "profile_smoke"
+    }
+  },
+  "planned_performance": {
+    "recipe": "full",
+    "source_sizes": [
+      1,
+      10,
+      100
+    ],
+    "state": "NOT MEASURED; requires a complete accepted full run"
+  },
+  "known_limits": [
+    "One-round smoke ratios are not speedups. Full-workload performance is measured only for source sizes with a complete accepted full-recipe receipt; coverage is recorded separately.",
+    "Tiny profiles validate instrumentation and result agreement; they do not characterize full Java/RDF/C-alias bottlenecks. Workload-profile attempts are recorded separately by source size.",
+    "Candidate-union and waiting-prefix-overlap probes are uncollected by active profiling and marked unavailable; legacy zero fields are not measurements.",
+    "Matrix memory records are selected allocation snapshots, not complete C-buffer accounting or peak live workspace.",
+    "No fresh exhaustive sanitizer/allocation sweep for the standalone ports is claimed here.",
+    "Reduced-data checks compare counts against a CNF reference that may be cached; exact small-case oracle checks are stronger evidence.",
+    "Fusion retains full global state dimensions and per-continuation work; the status does not imply a runtime or memory benefit.",
+    "Historical archived variants and pre-receipt logs are preserved evidence, not newly validated results."
+  ]
+}

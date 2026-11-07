@@ -19,6 +19,12 @@ static GrB_Vector result = GrB_NULL;
 static void setup(void)
 {
     LAGraph_Init(msg);
+#if LAGRAPH_SUITESPARSE
+    // The JIT cache is environment state, not part of the algorithm contract;
+    // this workspace's default cache can be read-only or stale, which would
+    // surface as a spurious GraphBLAS error.  Correctness runs disable the JIT.
+    GrB_set(GrB_GLOBAL, (int32_t)GxB_JIT_OFF, GxB_JIT_C_CONTROL);
+#endif
 }
 
 static void teardown(void)

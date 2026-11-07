@@ -1,0 +1,324 @@
+--- a/experimental/algorithm/LAGraph_CFPQ_RSM.c
++++ b/experimental/algorithm/LAGraph_CFPQ_RSM.c
+@@ -27,13 +27,18 @@
+         GrB_free(&M_new);                                                                          \
+         GrB_free(&scratch);                                                                        \
+         GrB_free(&s_temp);                                                                         \
+-        GrB_free(&rowvec);                                                                         \
+         LAGraph_Free((void **)&term_active, NULL);                                                 \
+-        FREE_MATRIX_ARRAY(term_src, num_term);                                                     \
+-        LAGraph_Free((void **)&term_src_count, NULL);                                              \
+-        LAGraph_Free((void **)&active, NULL);                                                      \
+-        LAGraph_Free((void **)&active_idx, NULL);                                                  \
+-        LAGraph_Free((void **)&active_vals, NULL);                                                 \
++        LAGraph_Free((void **)&rsm_pairs, NULL);                                                   \
++        LAGraph_Free((void **)&graph_pairs, NULL);                                                 \
++        LAGraph_Free((void **)&tmp_idx, NULL);                                                     \
++        LAGraph_Free((void **)&row_off, NULL);                                                     \
++        LAGraph_Free((void **)&row_labels, NULL);                                                  \
++        LAGraph_Free((void **)&graph_keys, NULL);                                                  \
++        LAGraph_Free((void **)&graph_off, NULL);                                                   \
++        LAGraph_Free((void **)&graph_labels, NULL);                                                \
++        LAGraph_Free((void **)&eligible, NULL);                                                    \
++        LAGraph_Free((void **)&front_i, NULL);                                                     \
++        LAGraph_Free((void **)&front_j, NULL);                                                     \
+         GrB_free(&new_edges);                                                                      \
+         GrB_free(&diag_entry);                                                                     \
+         GrB_free(&entry_vec);                                                                      \
+@@ -108,6 +113,48 @@
+ 
+ typedef struct
+ {
++    GrB_Index key;   // state q or vertex v
++    GrB_Index label; // terminal label t
++} s_joint_pair;
++
++static int s_index_cmp(const void *a, const void *b)
++{
++    GrB_Index x = *(const GrB_Index *) a;
++    GrB_Index y = *(const GrB_Index *) b;
++    return (x < y) ? -1 : ((x > y) ? 1 : 0);
++}
++
++static int s_pair_cmp(const void *a, const void *b)
++{
++    const s_joint_pair *p = (const s_joint_pair *) a;
++    const s_joint_pair *r = (const s_joint_pair *) b;
++    if (p->key < r->key)
++        return -1;
++    if (p->key > r->key)
++        return 1;
++    if (p->label < r->label)
++        return -1;
++    if (p->label > r->label)
++        return 1;
++    return 0;
++}
++
++static GrB_Index s_unique_sorted(GrB_Index *a, GrB_Index n)
++{
++    if (n == 0)
++        return 0;
++    qsort(a, (size_t) n, sizeof(GrB_Index), s_index_cmp);
++    GrB_Index m = 1;
++    for (GrB_Index k = 1; k < n; ++k)
++    {
++        if (a[k] != a[m - 1])
++            a[m++] = a[k];
++    }
++    return m;
++}
++
++typedef struct
++{
+     GrB_Index state_count;            // Q
+     GrB_Index terminal_count;
+     GrB_Index nonterminal_count;
+@@ -135,7 +182,6 @@
+     GrB_Matrix diag_entry = GrB_NULL;
+     GrB_Vector entry_vec = GrB_NULL;
+     GrB_Vector source_mask = GrB_NULL;
+-    GrB_Vector rowvec = GrB_NULL; // length-Q row activity of M
+ 
+     GrB_Matrix *graph_nt = NULL;
+     GrB_Matrix *W = NULL;         // QV x V, W[i] = (rsm_nonterm[i])^T * P
+@@ -144,11 +190,21 @@
+     GrB_Index num_nonterm = 0;
+ 
+     bool *term_active = NULL;
+-    GrB_Index **term_src = NULL;
+-    size_t *term_src_count = NULL;
+-    bool *active = NULL;
+-    GrB_Index *active_idx = NULL;
+-    bool *active_vals = NULL;
++
++    // joint terminal-filter index: sorted (q,t) and (v,t) pairs
++    s_joint_pair *rsm_pairs = NULL;
++    s_joint_pair *graph_pairs = NULL;
++    GrB_Index *tmp_idx = NULL;
++    GrB_Index *row_off = NULL;      // Q+1 offsets into row_labels
++    GrB_Index *row_labels = NULL;   // sorted terminal labels per state q
++    GrB_Index *graph_keys = NULL;   // sorted distinct vertices with summary labels
++    GrB_Index *graph_off = NULL;    // present_count+1 offsets into graph_labels
++    GrB_Index *graph_labels = NULL; // sorted terminal labels per present v
++    GrB_Index graph_key_count = 0;
++    bool *eligible = NULL;          // [num_term], per iteration
++    GrB_Index *front_i = NULL;      // reusable frontier row indices
++    GrB_Index *front_j = NULL;      // reusable frontier column indices
++    GrB_Index front_cap = 0;
+ 
+     LG_ASSERT(reachable != NULL, GrB_NULL_POINTER);
+     *reachable = GrB_NULL;
+@@ -276,9 +332,9 @@
+     if (num_term > 0)
+     {
+         LG_TRY(LAGraph_Calloc((void **) &term_active, num_term, sizeof(bool), msg));
+-        LG_TRY(LAGraph_Calloc((void **) &term_src, num_term, sizeof(GrB_Index *), msg));
+-        LG_TRY(LAGraph_Calloc((void **) &term_src_count, num_term, sizeof(size_t), msg));
+ 
++        // static emptiness check and edge-size bounds for the joint index
++        GrB_Index total_rsm = 0, total_graph = 0;
+         for (size_t i = 0; i < num_term; ++i)
+         {
+             if (rsm_term[i] == GrB_NULL || graph_term[i] == GrB_NULL)
+@@ -291,21 +347,95 @@
+                 continue;
+ 
+             term_active[i] = true;
+-            LG_TRY(LAGraph_Malloc((void **) &term_src[i], rn, sizeof(GrB_Index), msg));
++            total_rsm += rn;
++            total_graph += gn;
++        }
++
++        LG_TRY(LAGraph_Malloc((void **) &rsm_pairs, (size_t) total_rsm,
++                              sizeof(s_joint_pair), msg));
++        LG_TRY(LAGraph_Malloc((void **) &graph_pairs, (size_t) total_graph,
++                              sizeof(s_joint_pair), msg));
++
++        GrB_Index rpn = 0, gpn = 0;
++        for (size_t i = 0; i < num_term; ++i)
++        {
++            if (!term_active[i])
++                continue;
++
++            GrB_Index rn = 0, gn = 0;
++            GRB_TRY(GrB_Matrix_nvals(&rn, rsm_term[i]));
++            GRB_TRY(GrB_Matrix_nvals(&gn, graph_term[i]));
++
++            LG_TRY(LAGraph_Malloc((void **) &tmp_idx, (size_t) rn, sizeof(GrB_Index), msg));
+             GrB_Index rn2 = rn;
+-            GRB_TRY(GrB_Matrix_extractTuples_BOOL(term_src[i], NULL, NULL, &rn2, rsm_term[i]));
+-            term_src_count[i] = (size_t) rn2;
++            GRB_TRY(GrB_Matrix_extractTuples_BOOL(tmp_idx, NULL, NULL, &rn2, rsm_term[i]));
++            rn2 = s_unique_sorted(tmp_idx, rn2);
++            for (GrB_Index k = 0; k < rn2; ++k)
++            {
++                rsm_pairs[rpn].key = tmp_idx[k];
++                rsm_pairs[rpn].label = i;
++                rpn++;
++            }
++            LAGraph_Free((void **) &tmp_idx, msg);
++
++            LG_TRY(LAGraph_Malloc((void **) &tmp_idx, (size_t) gn, sizeof(GrB_Index), msg));
++            GrB_Index gn2 = gn;
++            GRB_TRY(GrB_Matrix_extractTuples_BOOL(tmp_idx, NULL, NULL, &gn2, graph_term[i]));
++            gn2 = s_unique_sorted(tmp_idx, gn2);
++            for (GrB_Index k = 0; k < gn2; ++k)
++            {
++                graph_pairs[gpn].key = tmp_idx[k];
++                graph_pairs[gpn].label = i;
++                gpn++;
++            }
++            LAGraph_Free((void **) &tmp_idx, msg);
+         }
+-    }
+ 
+-    if (Q > 0)
+-    {
+-        GRB_TRY(GrB_Vector_new(&rowvec, GrB_BOOL, Q));
+-        LG_TRY(LAGraph_Malloc((void **) &active, Q, sizeof(bool), msg));
+-        LG_TRY(LAGraph_Malloc((void **) &active_idx, Q, sizeof(GrB_Index), msg));
+-        LG_TRY(LAGraph_Malloc((void **) &active_vals, Q, sizeof(bool), msg));
+-        for (GrB_Index i = 0; i < Q; ++i)
+-            active[i] = false;
++        // RSM labels: sorted lists per state q, indexed by Q+1 offsets
++        LG_TRY(LAGraph_Calloc((void **) &row_off, (size_t) Q + 1, sizeof(GrB_Index), msg));
++        if (rpn > 0)
++        {
++            qsort(rsm_pairs, (size_t) rpn, sizeof(s_joint_pair), s_pair_cmp);
++            LG_TRY(LAGraph_Malloc((void **) &row_labels, (size_t) rpn,
++                                  sizeof(GrB_Index), msg));
++            for (GrB_Index k = 0; k < rpn; ++k)
++            {
++                row_labels[k] = rsm_pairs[k].label;
++                row_off[rsm_pairs[k].key + 1]++;
++            }
++            for (GrB_Index q = 0; q < Q; ++q)
++                row_off[q + 1] += row_off[q];
++        }
++
++        // graph labels: distinct present vertices, offsets and sorted label IDs
++        if (gpn > 0)
++        {
++            qsort(graph_pairs, (size_t) gpn, sizeof(s_joint_pair), s_pair_cmp);
++            LG_TRY(LAGraph_Malloc((void **) &graph_labels, (size_t) gpn,
++                                  sizeof(GrB_Index), msg));
++            LG_TRY(LAGraph_Malloc((void **) &graph_keys, (size_t) gpn,
++                                  sizeof(GrB_Index), msg));
++            LG_TRY(LAGraph_Calloc((void **) &graph_off, (size_t) gpn + 1,
++                                  sizeof(GrB_Index), msg));
++            GrB_Index k = 0;
++            while (k < gpn)
++            {
++                GrB_Index key = graph_pairs[k].key;
++                graph_keys[graph_key_count] = key;
++                while (k < gpn && graph_pairs[k].key == key)
++                {
++                    graph_labels[k] = graph_pairs[k].label;
++                    k++;
++                }
++                graph_key_count++;
++                graph_off[graph_key_count] = k;
++            }
++        }
++
++        LG_TRY(LAGraph_Calloc((void **) &eligible, num_term, sizeof(bool), msg));
++        LAGraph_Free((void **) &rsm_pairs, msg);
++        LAGraph_Free((void **) &graph_pairs, msg);
++        LAGraph_Free((void **) &tmp_idx, msg);
+     }
+ 
+     // each source s starts a call to the start nonterminal at (s, s)
+@@ -322,38 +452,66 @@
+     GRB_TRY(GrB_Matrix_nvals(&m_nvals, M));
+     while (m_nvals > 0)
+     {
+-        // mark rows of M that currently contain any true entry.
+-        if (Q > 0)
++        // Extract the frontier rows and columns once, then mark every terminal
++        // label that has both an outgoing RSM transition at a frontier state q
++        // and an outgoing graph edge at the frontier vertex v.
++        if (num_term > 0)
+         {
+-            GRB_TRY(GrB_Vector_clear(rowvec));
+-            GRB_TRY(GrB_reduce(rowvec, GrB_NULL, GrB_NULL, GrB_LOR_MONOID_BOOL, M, GrB_NULL));
+-            GrB_Index nactive = 0;
+-            GRB_TRY(GrB_Vector_nvals(&nactive, rowvec));
+-            GrB_Index nactive2 = nactive;
+-            GRB_TRY(GrB_Vector_extractTuples_BOOL(active_idx, active_vals, &nactive2, rowvec));
+-            memset(active, 0, (size_t) Q * sizeof(bool));
+-            for (GrB_Index k = 0; k < nactive2; ++k)
+-                active[active_idx[k]] = true;
+-        }
++            if (m_nvals > front_cap)
++            {
++                LG_TRY(LAGraph_Realloc((void **) &front_i, (size_t) m_nvals,
++                                       (size_t) front_cap, sizeof(GrB_Index), msg));
++                LG_TRY(LAGraph_Realloc((void **) &front_j, (size_t) m_nvals,
++                                       (size_t) front_cap, sizeof(GrB_Index), msg));
++                front_cap = m_nvals;
++            }
++            GrB_Index front_n = m_nvals;
++            GRB_TRY(GrB_Matrix_extractTuples_BOOL(front_i, front_j, NULL, &front_n, M));
++            memset(eligible, 0, (size_t) num_term * sizeof(bool));
++            for (GrB_Index k = 0; k < front_n; ++k)
++            {
++                GrB_Index q = front_i[k];
++                GrB_Index v = front_j[k] % V;
++                GrB_Index a = row_off[q];
++                GrB_Index a_end = row_off[q + 1];
+ 
+-        // Phase 1: terminal transitions.  T = A_i^T * M is nonempty only if
+-        // some source state of A_i is an active row of M, so whole chains can
+-        // be skipped before the shift.
+-        for (size_t i = 0; i < num_term; ++i)
+-        {
+-            if (!term_active[i])
+-                continue;
++                GrB_Index lo = 0, hi = graph_key_count;
++                while (lo < hi)
++                {
++                    GrB_Index mid = lo + (hi - lo) / 2;
++                    if (graph_keys[mid] < v)
++                        lo = mid + 1;
++                    else
++                        hi = mid;
++                }
++                if (lo >= graph_key_count || graph_keys[lo] != v)
++                    continue;
+ 
+-            bool predicted = false;
+-            for (size_t k = 0; k < term_src_count[i]; ++k)
+-            {
+-                if (active[term_src[i][k]])
++                GrB_Index b = graph_off[lo];
++                GrB_Index b_end = graph_off[lo + 1];
++                while (a < a_end && b < b_end)
+                 {
+-                    predicted = true;
+-                    break;
++                    GrB_Index la = row_labels[a];
++                    GrB_Index lb = graph_labels[b];
++                    if (la == lb)
++                    {
++                        eligible[la] = true;
++                        a++;
++                        b++;
++                    }
++                    else if (la < lb)
++                        a++;
++                    else
++                        b++;
+                 }
+             }
+-            if (!predicted)
++        }
++
++        // Phase 1: terminal transitions.  A whole chain is skipped unless a
++        // frontier entry has both the RSM transition and the graph edge.
++        for (size_t i = 0; i < num_term; ++i)
++        {
++            if (!eligible[i])
+                 continue;
+ 
+             LG_TRY(s_shift(scratch, rsm_term[i], M, Q, V));

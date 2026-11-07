@@ -1,0 +1,18 @@
+--- a/experimental/algorithm/LAGraph_CFPQ_RSM.c
++++ b/experimental/algorithm/LAGraph_CFPQ_RSM.c
+@@ -374,6 +374,15 @@
+             // scratch = reshape(R_A^T * M), QV x V
+             LG_TRY(s_shift(scratch, rsm_nonterm[i], M, Q, V));
+ 
++            // DS-21: remove waiting configurations already held in W[i].
++            GrB_Index w_old = 0;
++            GRB_TRY(GrB_Matrix_nvals(&w_old, W[i]));
++            if (w_old > 0)
++                GRB_TRY(GrB_apply(scratch, W[i], GrB_NULL, GrB_IDENTITY_BOOL, scratch,
++                                  GrB_DESC_RSC));
++
++            // count the remaining (fresh) scratch entries; an empty scratch is
++            // restored and skipped
+             GrB_Index x_nvals = 0;
+             GRB_TRY(GrB_Matrix_nvals(&x_nvals, scratch));
+             if (x_nvals > 0)

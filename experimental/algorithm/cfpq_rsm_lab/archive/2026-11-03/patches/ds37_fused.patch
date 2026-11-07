@@ -1,0 +1,18 @@
+--- a/baseline.c
++++ b/ds37_fused.c
+@@ -95,12 +95,11 @@
+     return GrB_SUCCESS;
+ }
+ 
+-// C |= A * B, using one reused QV x V product temporary.
++// C |= A * B, accumulated in place.  T keeps its signature and caller
++// allocation schedule but is unused here.
+ static GrB_Info s_mul_acc(GrB_Matrix C, GrB_Matrix A, GrB_Matrix B, GrB_Matrix T)
+ {
+-    H_TRY(GrB_Matrix_clear(T));
+-    H_TRY(GrB_mxm(T, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, A, B, GrB_NULL));
+-    H_TRY(GrB_eWiseAdd(C, GrB_NULL, GrB_NULL, GrB_LOR, C, T, GrB_NULL));
++    H_TRY(GrB_mxm(C, GrB_NULL, GrB_LOR, GrB_LOR_LAND_SEMIRING_BOOL, A, B, GrB_NULL));
+     return GrB_SUCCESS;
+ }
+ 

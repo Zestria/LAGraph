@@ -1,0 +1,1 @@
+Frozen campaign evidence before switching to inherited OpenMP threading. Original receipts remain under lab/runs/. Tool copies here preserve the prior receipt identities. The archived input manifest pins one thread and is historical only.

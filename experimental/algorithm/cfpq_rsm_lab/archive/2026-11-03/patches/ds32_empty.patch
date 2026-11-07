@@ -1,0 +1,81 @@
+--- a/baseline.c
++++ b/ds32_empty.c
+@@ -95,12 +95,29 @@
+     return GrB_SUCCESS;
+ }
+ 
+-// C |= A * B, using one reused QV x V product temporary.
+-static GrB_Info s_mul_acc(GrB_Matrix C, GrB_Matrix A, GrB_Matrix B, GrB_Matrix T)
+-{
+-    H_TRY(GrB_Matrix_clear(T));
+-    H_TRY(GrB_mxm(T, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, A, B, GrB_NULL));
+-    H_TRY(GrB_eWiseAdd(C, GrB_NULL, GrB_NULL, GrB_LOR, C, T, GrB_NULL));
++// C |= A * B, using one reused QV x V product temporary.  The first nonempty
++// product swaps into C instead of being unioned; later products use the union.
++static GrB_Info s_mul_acc(GrB_Matrix *C, GrB_Matrix *T, GrB_Matrix A, GrB_Matrix B,
++                          bool *acc_empty)
++{
++    H_TRY(GrB_Matrix_clear(*T));
++    H_TRY(GrB_mxm(*T, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, A, B, GrB_NULL));
++
++    GrB_Index tn = 0;
++    H_TRY(GrB_Matrix_nvals(&tn, *T));
++    if (tn == 0)
++        return GrB_SUCCESS;
++
++    if (*acc_empty)
++    {
++        GrB_Matrix swap = *C;
++        *C = *T;
++        *T = swap;
++        *acc_empty = false;
++        return GrB_SUCCESS;
++    }
++
++    H_TRY(GrB_eWiseAdd(*C, GrB_NULL, GrB_NULL, GrB_LOR, *C, *T, GrB_NULL));
+     return GrB_SUCCESS;
+ }
+ 
+@@ -127,6 +144,7 @@
+     GrB_Matrix M = GrB_NULL;
+     GrB_Matrix P = GrB_NULL;
+     GrB_Matrix acc = GrB_NULL;
++    bool acc_empty = true;
+     GrB_Matrix M_call = GrB_NULL;
+     GrB_Matrix M_new = GrB_NULL;
+     GrB_Matrix scratch = GrB_NULL;
+@@ -360,7 +378,7 @@
+             GrB_Index tn = 0;
+             GRB_TRY(GrB_Matrix_nvals(&tn, scratch));
+             if (tn > 0)
+-                LG_TRY(s_mul_acc(acc, scratch, graph_term[i], s_temp));
++                LG_TRY(s_mul_acc(&acc, &s_temp, scratch, graph_term[i], &acc_empty));
+             LG_TRY(s_unshift(scratch, Q, V));
+         }
+ 
+@@ -392,7 +410,7 @@
+                 GrB_Index gnt_nvals = 0;
+                 GRB_TRY(GrB_Matrix_nvals(&gnt_nvals, graph_nt[i]));
+                 if (gnt_nvals > 0)
+-                    LG_TRY(s_mul_acc(acc, scratch, graph_nt[i], s_temp));
++                    LG_TRY(s_mul_acc(&acc, &s_temp, scratch, graph_nt[i], &acc_empty));
+                 
+                 // RETURN bookkeeping: W[i] == reshape(R_i' * P)
+                 GRB_TRY(GrB_eWiseAdd(W[i], GrB_NULL, GrB_NULL, GrB_LOR, W[i], scratch, GrB_NULL));
+@@ -441,7 +459,7 @@
+                 GrB_Index w_nvals = 0;
+                 GRB_TRY(GrB_Matrix_nvals(&w_nvals, W[i]));
+                 if (w_nvals > 0)
+-                    LG_TRY(s_mul_acc(acc, W[i], new_edges, s_temp));
++                    LG_TRY(s_mul_acc(&acc, &s_temp, W[i], new_edges, &acc_empty));
+             }
+ 
+             GRB_TRY(GxB_Matrix_reshape(new_edges, false, 1, V * V, GrB_NULL));
+@@ -451,6 +469,7 @@
+         GRB_TRY(GrB_free(&M_new));
+         GRB_TRY(GxB_Matrix_reshapeDup(&M_new, acc, false, Q, V * V, GrB_NULL));
+         GRB_TRY(GrB_Matrix_clear(acc));
++        acc_empty = true;
+         GRB_TRY(GrB_eWiseAdd(M_new, P, GrB_NULL, GrB_LOR, M_new, M_call, GrB_DESC_RSC));
+         GRB_TRY(GrB_eWiseAdd(P, GrB_NULL, GrB_NULL, GrB_LOR, P, M_new, GrB_NULL));
+ 

@@ -1,0 +1,252 @@
+--- a/baseline.c
++++ b/ds35_lazy_nt.c
+@@ -14,6 +14,16 @@
+         {                                                                                          \
+             for (size_t _k = 0; _k < (len); ++_k)                                                  \
+                 GrB_free(&(array)[_k]);                                                            \
++            LAGraph_Free((void **)&(array), NULL);                                                 \
++        }                                                                                          \
++    }
++
++#define FREE_BAG_ARRAY(array, len)                                                                 \
++    {                                                                                              \
++        if ((array) != NULL)                                                                       \
++        {                                                                                          \
++            for (size_t _k = 0; _k < (len); ++_k)                                                  \
++                s_bag_free(&(array)[_k]);                                                          \
+             LAGraph_Free((void **)&(array), NULL);                                                 \
+         }                                                                                          \
+     }
+@@ -38,7 +48,8 @@
+         GrB_free(&diag_entry);                                                                     \
+         GrB_free(&entry_vec);                                                                      \
+         GrB_free(&source_mask);                                                                    \
+-        FREE_GRB_MATRIX_ARRAY(graph_nt, num_nonterm);                                              \
++        GrB_free(&bag_carry);                                                                      \
++        FREE_BAG_ARRAY(graph_nt, num_nonterm);                                                     \
+         FREE_GRB_MATRIX_ARRAY(W, num_nonterm);                                                     \
+         FREE_GRB_MATRIX_ARRAY(rsm_start, num_nonterm);                                             \
+     }
+@@ -101,6 +112,128 @@
+     H_TRY(GrB_Matrix_clear(T));
+     H_TRY(GrB_mxm(T, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, A, B, GrB_NULL));
+     H_TRY(GrB_eWiseAdd(C, GrB_NULL, GrB_NULL, GrB_LOR, C, T, GrB_NULL));
++    return GrB_SUCCESS;
++}
++
++
++// ---------------------------------------------------------------------------
++// Fixed component bag: owned disjoint BOOL components, at most one per
++// binary magnitude rank.  Capacity is fixed at bag creation.
++// ---------------------------------------------------------------------------
++
++typedef struct
++{
++    GrB_Matrix *comp; // live owned components, [0, count)
++    GrB_Index *nnz;   // cached component nnz
++    GrB_Index count;
++    GrB_Index total;  // exact sum of live component nnz
++    GrB_Index cap;
++    GrB_Index nrows;
++    GrB_Index ncols;
++} s_bag;
++
++#define S_BAG_CAP ((GrB_Index) (8 * sizeof(GrB_Index) + 1))
++
++static GrB_Index s_bag_rank(GrB_Index nnz)
++{
++    GrB_Index rank = 0;
++    while (nnz > 1)
++    {
++        nnz >>= 1;
++        rank++;
++    }
++    return rank;
++}
++
++static int s_bag_init(s_bag *bag, GrB_Index nrows, GrB_Index ncols, char *msg)
++{
++    memset(bag, 0, sizeof(*bag));
++    bag->cap = S_BAG_CAP;
++    bag->nrows = nrows;
++    bag->ncols = ncols;
++    int rc = LAGraph_Calloc((void **) &bag->comp, (size_t) bag->cap, sizeof(GrB_Matrix), msg);
++    if (rc != GrB_SUCCESS)
++        return rc;
++    rc = LAGraph_Calloc((void **) &bag->nnz, (size_t) bag->cap, sizeof(GrB_Index), msg);
++    if (rc != GrB_SUCCESS)
++    {
++        LAGraph_Free((void **) &bag->comp, msg);
++        return rc;
++    }
++    return GrB_SUCCESS;
++}
++
++static void s_bag_free(s_bag *bag)
++{
++    if (bag->comp != NULL)
++    {
++        for (GrB_Index k = 0; k < bag->count; ++k)
++            GrB_free(&bag->comp[k]);
++    }
++    LAGraph_Free((void **) &bag->comp, NULL);
++    LAGraph_Free((void **) &bag->nnz, NULL);
++    bag->count = 0;
++    bag->total = 0;
++}
++
++// Take ownership of *carry; on success *carry becomes NULL.  The carry's
++// original nnz is disjoint from every live component.
++static GrB_Info s_bag_append(s_bag *bag, GrB_Matrix *carry, GrB_Index carry_nnz)
++{
++    if (*carry == GrB_NULL || carry_nnz == 0)
++        return GrB_SUCCESS;
++
++    bag->total += carry_nnz;
++    while (true)
++    {
++        GrB_Index rank = s_bag_rank(carry_nnz);
++        GrB_Index slot = bag->count;
++        for (GrB_Index k = 0; k < bag->count; ++k)
++        {
++            if (s_bag_rank(bag->nnz[k]) == rank)
++            {
++                slot = k;
++                break;
++            }
++        }
++        if (slot == bag->count)
++            break;
++
++        H_TRY(GrB_eWiseAdd(*carry, GrB_NULL, GrB_NULL, GrB_LOR, *carry, bag->comp[slot],
++                           GrB_NULL));
++        carry_nnz += bag->nnz[slot];
++        H_TRY(GrB_free(&bag->comp[slot]));
++        for (GrB_Index k = slot; k + 1 < bag->count; ++k)
++        {
++            bag->comp[k] = bag->comp[k + 1];
++            bag->nnz[k] = bag->nnz[k + 1];
++        }
++        bag->count--;
++    }
++
++    if (bag->count >= bag->cap)
++        return GrB_OUT_OF_MEMORY; // impossible with one component per rank
++
++    bag->comp[bag->count] = *carry;
++    bag->nnz[bag->count] = carry_nnz;
++    bag->count++;
++    *carry = GrB_NULL;
++    return GrB_SUCCESS;
++}
++
++// candidate = candidate \ bag; visits the most recently appended components
++// first and refreshes candidate_nnz after each mask.
++static GrB_Info s_bag_subtract(GrB_Matrix candidate, GrB_Index *candidate_nnz,
++                               const s_bag *bag)
++{
++    for (GrB_Index k = bag->count; k > 0; --k)
++    {
++        H_TRY(GrB_apply(candidate, bag->comp[k - 1], GrB_NULL, GrB_IDENTITY_BOOL, candidate,
++                        GrB_DESC_RSC));
++        H_TRY(GrB_Matrix_nvals(candidate_nnz, candidate));
++        if (*candidate_nnz == 0)
++            break;
++    }
+     return GrB_SUCCESS;
+ }
+ 
+@@ -137,7 +270,8 @@
+     GrB_Vector source_mask = GrB_NULL;
+     GrB_Vector rowvec = GrB_NULL; // length-Q row activity of M
+ 
+-    GrB_Matrix *graph_nt = NULL;
++    s_bag *graph_nt = NULL;
++    GrB_Matrix bag_carry = GrB_NULL;
+     GrB_Matrix *W = NULL;         // QV x V, W[i] = (rsm_nonterm[i])^T * P
+     GrB_Matrix *rsm_start = NULL; // Q x 1, rsm_start[S][i] = true, iff start_states[S] = i
+     GrB_Index num_term = 0;
+@@ -247,13 +381,14 @@
+     // allocate the per-box arrays
+     //--------------------------------------------------------------------------
+ 
+-    LG_TRY(LAGraph_Calloc((void **)&graph_nt, num_nonterm, sizeof(GrB_Matrix), msg));
++    LG_TRY(LAGraph_Calloc((void **)&graph_nt, num_nonterm, sizeof(s_bag), msg));
++    for (size_t i = 0; i < num_nonterm; ++i)
++        LG_TRY(s_bag_init(&graph_nt[i], V, V, msg));
+     LG_TRY(LAGraph_Calloc((void **)&W, num_nonterm, sizeof(GrB_Matrix), msg));
+     LG_TRY(LAGraph_Calloc((void **)&rsm_start, num_nonterm, sizeof(GrB_Matrix), msg));
+ 
+     for (size_t i = 0; i < num_nonterm; ++i)
+     {
+-        GRB_TRY(GrB_Matrix_new(&graph_nt[i], GrB_BOOL, V, V));
+         if (rsm_nonterm[i] == GrB_NULL)
+             continue;
+ 
+@@ -388,11 +523,12 @@
+                                 rsm_start[i], diag_entry, GrB_NULL));
+                 GRB_TRY(GrB_free(&diag_entry));
+ 
+-                // skip over nonterminal i using the summary edges
+-                GrB_Index gnt_nvals = 0;
+-                GRB_TRY(GrB_Matrix_nvals(&gnt_nvals, graph_nt[i]));
+-                if (gnt_nvals > 0)
+-                    LG_TRY(s_mul_acc(acc, scratch, graph_nt[i], s_temp));
++                // skip over nonterminal i, streaming the summary components
++                if (graph_nt[i].total > 0)
++                {
++                    for (GrB_Index c = 0; c < graph_nt[i].count; ++c)
++                        LG_TRY(s_mul_acc(acc, scratch, graph_nt[i].comp[c], s_temp));
++                }
+                 
+                 // RETURN bookkeeping: W[i] == reshape(R_i' * P)
+                 GRB_TRY(GrB_eWiseAdd(W[i], GrB_NULL, GrB_NULL, GrB_LOR, W[i], scratch, GrB_NULL));
+@@ -418,22 +554,17 @@
+             GRB_TRY(GxB_Matrix_reshape(new_edges, false, V, V, GrB_NULL));
+ 
+             // dG = new_edges \ graph_nt[i]
+-            GrB_Index gnt_nvals = 0;
+-            GRB_TRY(GrB_Matrix_nvals(&gnt_nvals, graph_nt[i]));
+-            if (gnt_nvals > 0)
++            if (graph_nt[i].total > 0)
++                LG_TRY(s_bag_subtract(new_edges, &ne_vals, &graph_nt[i]));
++            if (ne_vals == 0)
+             {
+-                GRB_TRY(GrB_apply(new_edges, graph_nt[i], GrB_NULL, GrB_IDENTITY_BOOL, new_edges,
+-                                  GrB_DESC_RSC));
+-                GRB_TRY(GrB_Matrix_nvals(&ne_vals, new_edges));
+-                if (ne_vals == 0)
+-                {
+-                    GRB_TRY(GxB_Matrix_reshape(new_edges, false, 1, V*V, GrB_NULL));
+-                    continue;
+-                }
++                GRB_TRY(GxB_Matrix_reshape(new_edges, false, 1, V*V, GrB_NULL));
++                continue;
+             }
+ 
+-            GRB_TRY(GrB_eWiseAdd(graph_nt[i], GrB_NULL, GrB_NULL, GrB_LOR, graph_nt[i], new_edges,
+-                                 GrB_NULL));
++            // publish this disjoint summary delta where the old union occurred
++            GRB_TRY(GrB_Matrix_dup(&bag_carry, new_edges));
++            LG_TRY(s_bag_append(&graph_nt[i], &bag_carry, ne_vals));
+ 
+             // acc |= W * dG, where W = R_A^T * P
+             if (W[i] != GrB_NULL)
+@@ -461,10 +592,14 @@
+         GRB_TRY(GrB_Matrix_nvals(&m_nvals, M));
+     }
+ 
+-    // reachable(w) = OR_s source_mask(s) & graph_nt[start](s, w)
++    // reachable(w) = OR_s source_mask(s) & graph_nt[start](s, w), streamed
++    // over the start box's summary components
+     GRB_TRY(GrB_Vector_new(reachable, GrB_BOOL, V));
+-    GRB_TRY(GrB_mxv(*reachable, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL,
+-                    graph_nt[start_nonterm], source_mask, GrB_DESC_T0));
++    for (GrB_Index c = 0; c < graph_nt[start_nonterm].count; ++c)
++    {
++        GRB_TRY(GrB_mxv(*reachable, GrB_NULL, GrB_LOR, GrB_LOR_LAND_SEMIRING_BOOL,
++                        graph_nt[start_nonterm].comp[c], source_mask, GrB_DESC_T0));
++    }
+ 
+     LG_FREE_WORK;
+     return GrB_SUCCESS;

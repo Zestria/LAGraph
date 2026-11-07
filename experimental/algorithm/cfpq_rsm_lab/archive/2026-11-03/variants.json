@@ -1,0 +1,303 @@
+[
+  {
+    "variant": "ds20",
+    "title": "Return orientation",
+    "edit": "Permanent column/hypersparse W and summary delta; includes conversion/reshape costs.",
+    "parent": "baseline",
+    "source_sha256": "498d857414feced902ef74b23dfcd4b030f3ef77d3540864186b0ffa8eab7fa9",
+    "parent_sha256": "f3642839be04eee2d6411d3db9d6973c50c19f386d7e61f4d9ff5a926af0447b",
+    "source": "sources/ds20.c",
+    "patch": "patches/ds20.patch",
+    "correctness": "accepted pragmatic smoke/lab checks",
+    "measured_sources": [
+      1,
+      10,
+      100
+    ],
+    "incomplete_sources": [],
+    "conclusion": "Negative completed experiment; retain without rerunning."
+  },
+  {
+    "variant": "ds21",
+    "title": "Waiting-state deduplication",
+    "edit": "Subtract W from newly shifted waiting configurations before calls/products/union.",
+    "parent": "baseline",
+    "source_sha256": "6668b2e542d94659987015af276a4963ad08a21748dc567f44da9139a09abf5c",
+    "parent_sha256": "f3642839be04eee2d6411d3db9d6973c50c19f386d7e61f4d9ff5a926af0447b",
+    "source": "sources/ds21.c",
+    "patch": "patches/ds21.patch",
+    "correctness": "accepted pragmatic smoke/lab checks",
+    "measured_sources": [
+      1,
+      10,
+      100
+    ],
+    "incomplete_sources": [],
+    "conclusion": "Negative completed experiment; sampled overlap was absent."
+  },
+  {
+    "variant": "ds22",
+    "title": "Earlier block visited layout",
+    "edit": "Block P with extra fresh_B and call reshapes; differs from lean D1.",
+    "parent": "baseline",
+    "source_sha256": "d3270385d5dd02f13c7c8065ce94e96a26d18cae372df6ca26416194a1511545",
+    "parent_sha256": "f3642839be04eee2d6411d3db9d6973c50c19f386d7e61f4d9ff5a926af0447b",
+    "source": "sources/ds22.c",
+    "patch": "patches/ds22.patch",
+    "correctness": "accepted pragmatic smoke/lab checks",
+    "measured_sources": [
+      1,
+      10,
+      100
+    ],
+    "incomplete_sources": [],
+    "conclusion": "Negative completed experiment; does not settle D1."
+  },
+  {
+    "variant": "ds30_assign",
+    "title": "Masked scalar insertion",
+    "edit": "Replace growing P, graph_nt and W unions with structural masked scalar true assignment.",
+    "parent": "baseline",
+    "source_sha256": "9952a1123f3e2edfae30b60abe006eb09892af9556a3b77eefccb74ef1e46d5f",
+    "parent_sha256": "f3642839be04eee2d6411d3db9d6973c50c19f386d7e61f4d9ff5a926af0447b",
+    "source": "sources/ds30_assign.c",
+    "patch": "patches/ds30_assign.patch",
+    "correctness": "accepted pragmatic smoke/lab checks",
+    "measured_sources": [
+      1,
+      10
+    ],
+    "incomplete_sources": [
+      100
+    ],
+    "conclusion": "Generally neutral/slower on completed 1/10-source runs."
+  },
+  {
+    "variant": "ds31_joint",
+    "title": "Joint terminal eligibility",
+    "edit": "Index outgoing labels by RSM state and graph vertex; skip impossible terminal chains.",
+    "parent": "baseline",
+    "source_sha256": "3b39940a19ba885d0a4ac5ae7798ab984425cf8ec3fa527ae0726dc369e14270",
+    "parent_sha256": "f3642839be04eee2d6411d3db9d6973c50c19f386d7e61f4d9ff5a926af0447b",
+    "source": "sources/ds31_joint.c",
+    "patch": "patches/ds31_joint.patch",
+    "correctness": "accepted pragmatic smoke/lab checks",
+    "measured_sources": [
+      1,
+      10
+    ],
+    "incomplete_sources": [
+      100
+    ],
+    "conclusion": "Very strong on Java, major regressions on RDF/C-alias; workload-specific."
+  },
+  {
+    "variant": "ds32_empty",
+    "title": "Empty/first-contribution paths",
+    "edit": "Skip empty product unions and swap the first nonempty product into acc.",
+    "parent": "baseline",
+    "source_sha256": "a156634dba2e5aae15d8881df31b4250c6cdb2a11be88184cb0f4361b0022675",
+    "parent_sha256": "f3642839be04eee2d6411d3db9d6973c50c19f386d7e61f4d9ff5a926af0447b",
+    "source": "sources/ds32_empty.c",
+    "patch": "patches/ds32_empty.patch",
+    "correctness": "accepted pragmatic smoke/lab checks",
+    "measured_sources": [
+      1,
+      10
+    ],
+    "incomplete_sources": [
+      100
+    ],
+    "conclusion": "Promising broadly, especially Java; keep independent."
+  },
+  {
+    "variant": "ds33_format",
+    "title": "Adaptive terminal orientation",
+    "edit": "Operand-size heuristic and private opposite-format cache of immutable graph terminals.",
+    "parent": "baseline",
+    "source_sha256": "9196fb84375c529525e036f2558460c1f36bb4cd90068c823fcef184649da5d0",
+    "parent_sha256": "f3642839be04eee2d6411d3db9d6973c50c19f386d7e61f4d9ff5a926af0447b",
+    "source": "sources/ds33_format.c",
+    "patch": "patches/ds33_format.patch",
+    "correctness": "accepted pragmatic smoke/lab checks",
+    "measured_sources": [
+      1,
+      10
+    ],
+    "incomplete_sources": [
+      100
+    ],
+    "conclusion": "Mostly neutral/slower; Java regression at 10 sources."
+  },
+  {
+    "variant": "ds34_lazy_p",
+    "title": "Lazy visited state",
+    "edit": "Disjoint frontier bags with cached cardinalities, size-rank merges and sequential subtraction.",
+    "parent": "baseline",
+    "source_sha256": "7aa7d7cca1b4a6210e88bb838d1fbf73f6be2b5278c759f32ed6147439e2692c",
+    "parent_sha256": "f3642839be04eee2d6411d3db9d6973c50c19f386d7e61f4d9ff5a926af0447b",
+    "source": "sources/ds34_lazy_p.c",
+    "patch": "patches/ds34_lazy_p.patch",
+    "correctness": "accepted pragmatic smoke/lab checks",
+    "measured_sources": [
+      1,
+      10
+    ],
+    "incomplete_sources": [
+      100
+    ],
+    "conclusion": "No broad gain at 1/10 sources; C-alias regression at 10."
+  },
+  {
+    "variant": "ds35_lazy_nt",
+    "title": "Lazy summary relations",
+    "edit": "Disjoint summary bags, streaming component products, sequential masks and final component mxv.",
+    "parent": "baseline",
+    "source_sha256": "5c5331f4dbdbbf02b7a4c956b2d292c3cab2c44972dc818cd6efa942b9bc519b",
+    "parent_sha256": "f3642839be04eee2d6411d3db9d6973c50c19f386d7e61f4d9ff5a926af0447b",
+    "source": "sources/ds35_lazy_nt.c",
+    "patch": "patches/ds35_lazy_nt.patch",
+    "correctness": "accepted pragmatic smoke/lab checks",
+    "measured_sources": [
+      1,
+      10
+    ],
+    "incomplete_sources": [
+      100
+    ],
+    "conclusion": "No broad gain at 1/10 sources; C-alias regression at 10."
+  },
+  {
+    "variant": "ds36_pair",
+    "title": "Pattern products",
+    "edit": "Replace BOOL LOR_LAND products with ANY_PAIR under the accepted true-only contract.",
+    "parent": "baseline",
+    "source_sha256": "796030c006dc0df62d0aa51b21638015ea7181058627018e9faa6711301e29df",
+    "parent_sha256": "f3642839be04eee2d6411d3db9d6973c50c19f386d7e61f4d9ff5a926af0447b",
+    "source": "sources/ds36_pair.c",
+    "patch": "patches/ds36_pair.patch",
+    "correctness": "accepted pragmatic smoke/lab checks",
+    "measured_sources": [
+      1,
+      10
+    ],
+    "incomplete_sources": [
+      100
+    ],
+    "conclusion": "Mostly small changes; no large demonstrated broad gain."
+  },
+  {
+    "variant": "ds37_fused",
+    "title": "Fused accumulation",
+    "edit": "Accumulate graph products directly into acc with mxm/LOR, avoiding temporary union.",
+    "parent": "baseline",
+    "source_sha256": "21a56c43510f71f919ef5405a40317a30fe66a075701635eea4c7fc037fe32b3",
+    "parent_sha256": "f3642839be04eee2d6411d3db9d6973c50c19f386d7e61f4d9ff5a926af0447b",
+    "source": "sources/ds37_fused.c",
+    "patch": "patches/ds37_fused.patch",
+    "correctness": "accepted pragmatic smoke/lab checks",
+    "measured_sources": [
+      1,
+      10
+    ],
+    "incomplete_sources": [
+      100
+    ],
+    "conclusion": "Regresses Java and C-alias at 10 sources."
+  },
+  {
+    "variant": "ds38_no_product_clear",
+    "title": "One redundant-clear removal",
+    "edit": "Remove only the product scratch clear before overwrite mxm.",
+    "parent": "baseline",
+    "source_sha256": "ba91e5c42ec505760d601006c7edf3e0d7ccdf6772eb7be1e6cd4198ba370fd7",
+    "parent_sha256": "f3642839be04eee2d6411d3db9d6973c50c19f386d7e61f4d9ff5a926af0447b",
+    "source": "sources/ds38_no_product_clear.c",
+    "patch": "patches/ds38_no_product_clear.patch",
+    "correctness": "accepted pragmatic smoke/lab checks",
+    "measured_sources": [
+      1,
+      10
+    ],
+    "incomplete_sources": [
+      100
+    ],
+    "conclusion": "Mostly near baseline; not a blanket clear-removal experiment."
+  },
+  {
+    "variant": "ds39_direct_calls",
+    "title": "Direct flat calls",
+    "edit": "Collect call tuples and bulk-build flat M_call, replacing diagonal/reshape/call mxm.",
+    "parent": "baseline",
+    "source_sha256": "e9fbc199814b9901fb463631c10439a93d9f97227865f7e97f2dcef73e51ba00",
+    "parent_sha256": "f3642839be04eee2d6411d3db9d6973c50c19f386d7e61f4d9ff5a926af0447b",
+    "source": "sources/ds39_direct_calls.c",
+    "patch": "patches/ds39_direct_calls.patch",
+    "correctness": "accepted pragmatic smoke/lab checks",
+    "measured_sources": [
+      1,
+      10
+    ],
+    "incomplete_sources": [
+      100
+    ],
+    "conclusion": "Modest improvements, especially C-alias."
+  },
+  {
+    "variant": "d1_native",
+    "title": "Lean block P and calls",
+    "edit": "Native block call tuples and visited subtraction before copying/reshaping only fresh frontier.",
+    "parent": "baseline",
+    "source_sha256": "c2d7e56d94b112eefb10ecf11636c9ae7f24940f9fb93ad4814fd5b0db25d259",
+    "parent_sha256": "f3642839be04eee2d6411d3db9d6973c50c19f386d7e61f4d9ff5a926af0447b",
+    "source": "sources/d1_native.c",
+    "patch": "patches/d1_native.patch",
+    "correctness": "accepted pragmatic smoke/lab checks",
+    "measured_sources": [
+      1,
+      10
+    ],
+    "incomplete_sources": [
+      100
+    ],
+    "conclusion": "Modest improvements; independent of earlier DS-22."
+  },
+  {
+    "variant": "config_block",
+    "title": "Consistent block configurations",
+    "edit": "QV x V configurations with frontier tuple buckets and implicit RSM routing; no reshape or Kronecker matrix.",
+    "parent": "baseline",
+    "source_sha256": "291bf59c4494bc657ccb8ef81027be077a9d91b9d78725fe53695a214fcca808",
+    "parent_sha256": "f3642839be04eee2d6411d3db9d6973c50c19f386d7e61f4d9ff5a926af0447b",
+    "source": "sources/config_block.c",
+    "patch": "patches/config_block.patch",
+    "correctness": "accepted pragmatic smoke/lab checks",
+    "measured_sources": [
+      1,
+      10
+    ],
+    "incomplete_sources": [
+      100
+    ],
+    "conclusion": "Strongest broad candidate so far; not promoted or combined."
+  },
+  {
+    "variant": "d3_masked_product",
+    "title": "Visited-masked graph products",
+    "edit": "Add complemented block P masks to D1 terminal/skip/return products.",
+    "parent": "d1_native",
+    "source_sha256": "d1f8f856ca86000e215d92cc8bae0f31a2c512e8999568e5437eec71318accad",
+    "parent_sha256": "c2d7e56d94b112eefb10ecf11636c9ae7f24940f9fb93ad4814fd5b0db25d259",
+    "source": "sources/d3_masked_product.c",
+    "patch": "patches/d3_masked_product.patch",
+    "correctness": "accepted pragmatic smoke/lab checks",
+    "measured_sources": [
+      1,
+      10
+    ],
+    "incomplete_sources": [
+      100
+    ],
+    "conclusion": "No convincing improvement over D1; compare with D1, not only baseline."
+  }
+]

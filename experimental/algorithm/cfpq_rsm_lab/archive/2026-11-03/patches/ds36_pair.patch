@@ -1,0 +1,47 @@
+--- a/baseline.c
++++ b/ds36_pair.c
+@@ -82,7 +82,7 @@
+ // T must be Q x VV on entry; its content is overwritten.
+ static GrB_Info s_shift(GrB_Matrix T, GrB_Matrix A, GrB_Matrix M, GrB_Index Q, GrB_Index V)
+ {
+-    H_TRY(GrB_mxm(T, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, A, M, GrB_DESC_T0));
++    H_TRY(GrB_mxm(T, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL, A, M, GrB_DESC_T0));
+     H_TRY(GxB_Matrix_reshape(T, false, Q * V, V, GrB_NULL));
+     return GrB_SUCCESS;
+ }
+@@ -99,7 +99,7 @@
+ static GrB_Info s_mul_acc(GrB_Matrix C, GrB_Matrix A, GrB_Matrix B, GrB_Matrix T)
+ {
+     H_TRY(GrB_Matrix_clear(T));
+-    H_TRY(GrB_mxm(T, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, A, B, GrB_NULL));
++    H_TRY(GrB_mxm(T, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL, A, B, GrB_NULL));
+     H_TRY(GrB_eWiseAdd(C, GrB_NULL, GrB_NULL, GrB_LOR, C, T, GrB_NULL));
+     return GrB_SUCCESS;
+ }
+@@ -384,7 +384,7 @@
+                                    GrB_DESC_T0));
+                 GRB_TRY(GrB_Matrix_diag(&diag_entry, entry_vec, 0)); // V x V
+                 GRB_TRY(GxB_Matrix_reshape(diag_entry, false, 1, V * V, GrB_NULL));
+-                GRB_TRY(GrB_mxm(M_call, GrB_NULL, GrB_LOR, GrB_LOR_LAND_SEMIRING_BOOL,
++                GRB_TRY(GrB_mxm(M_call, GrB_NULL, GrB_LOR, GxB_ANY_PAIR_BOOL,
+                                 rsm_start[i], diag_entry, GrB_NULL));
+                 GRB_TRY(GrB_free(&diag_entry));
+ 
+@@ -407,7 +407,7 @@
+                 continue;
+ 
+             // 1 x Q * Q x VV -> 1 x VV
+-            GRB_TRY(GrB_mxm(new_edges, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL,
++            GRB_TRY(GrB_mxm(new_edges, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL,
+                             (GrB_Matrix)final_states[i], M, GrB_DESC_T0));
+ 
+             GrB_Index ne_vals = 0;
+@@ -463,7 +463,7 @@
+ 
+     // reachable(w) = OR_s source_mask(s) & graph_nt[start](s, w)
+     GRB_TRY(GrB_Vector_new(reachable, GrB_BOOL, V));
+-    GRB_TRY(GrB_mxv(*reachable, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL,
++    GRB_TRY(GrB_mxv(*reachable, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL,
+                     graph_nt[start_nonterm], source_mask, GrB_DESC_T0));
+ 
+     LG_FREE_WORK;

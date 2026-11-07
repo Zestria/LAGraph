@@ -1,0 +1,17 @@
+{
+  "snapshot_date": "2026-11-03",
+  "captured_utc": "2026-11-03T08:18:06.866876+00:00",
+  "repository": "/home/hollow/repo/LAGraph",
+  "commit": "462d451e65d32b512a5ed5dd125681e287139846",
+  "git_status": " M experimental/algorithm/cfpq_rsm_lab/run.py\n M experimental/algorithm/cfpq_rsm_lab/tests/test_ds00.c\n?? .clangd\n?? DEEPSEEK_FEEDBACK.md\n?? DEEPSEEK_INSTRUCTIONS.md\n?? DEEPSEEK_REMAINDER.md\n?? build-exp-release/\n?? experimental/algorithm/cfpq_rsm_lab/archive/\n?? experimental/algorithm/cfpq_rsm_lab/run_overnight.sh\n?? experimental/algorithm/cfpq_rsm_lab/run_r10_overnight.sh\n?? experimental/algorithm/cfpq_rsm_lab/run_r9_overnight.sh\n?? experimental/algorithm/cfpq_rsm_lab/summarize_overnight.py\n?? experimental/algorithm/cfpq_rsm_lab/summarize_r10_overnight.py\n?? experimental/algorithm/cfpq_rsm_lab/summarize_r9_overnight.py\n?? experimental/algorithm/cfpq_rsm_lab/variants/baseline.c\n?? experimental/algorithm/cfpq_rsm_lab/variants/config_block.c\n?? experimental/algorithm/cfpq_rsm_lab/variants/d1_native.c\n?? experimental/algorithm/cfpq_rsm_lab/variants/d3_masked_product.c\n?? experimental/algorithm/cfpq_rsm_lab/variants/ds20.c\n?? experimental/algorithm/cfpq_rsm_lab/variants/ds21.c\n?? experimental/algorithm/cfpq_rsm_lab/variants/ds22.c\n?? experimental/algorithm/cfpq_rsm_lab/variants/ds30_assign.c\n?? experimental/algorithm/cfpq_rsm_lab/variants/ds31_joint.c\n?? experimental/algorithm/cfpq_rsm_lab/variants/ds32_empty.c\n?? experimental/algorithm/cfpq_rsm_lab/variants/ds33_format.c\n?? experimental/algorithm/cfpq_rsm_lab/variants/ds34_lazy_p.c\n?? experimental/algorithm/cfpq_rsm_lab/variants/ds35_lazy_nt.c\n?? experimental/algorithm/cfpq_rsm_lab/variants/ds36_pair.c\n?? experimental/algorithm/cfpq_rsm_lab/variants/ds37_fused.c\n?? experimental/algorithm/cfpq_rsm_lab/variants/ds38_no_product_clear.c\n?? experimental/algorithm/cfpq_rsm_lab/variants/ds39_direct_calls.c\n",
+  "recent_candidates": 16,
+  "historical_display_names": 58,
+  "summary_rows": 25463,
+  "excluded_directory_names": [
+    "jit-cache",
+    "jit_cache",
+    "gb_jit_cache",
+    "__pycache__"
+  ],
+  "notes": "Local immutable archive; no benchmark execution, commit, promotion, source mutation or remote backup."
+}

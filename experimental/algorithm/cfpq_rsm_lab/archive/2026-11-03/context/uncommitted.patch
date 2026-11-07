@@ -1,0 +1,227 @@
+diff --git a/experimental/algorithm/cfpq_rsm_lab/run.py b/experimental/algorithm/cfpq_rsm_lab/run.py
+index 08c9d3c9..dfd5e237 100755
+--- a/experimental/algorithm/cfpq_rsm_lab/run.py
++++ b/experimental/algorithm/cfpq_rsm_lab/run.py
+@@ -1,9 +1,8 @@
+ #!/usr/bin/env python3
+ """Build CFPQ RSM variants and compare them on the same inputs (DS-01-R2).
+ 
+-The baseline is normally the frozen corrected reference
+-(experimental/algorithm/cfpq_rsm_lab/variants/correctness_r2.c). A variant is one
+-of:
++The baseline is normally the frozen copy of the production source
++(experimental/algorithm/cfpq_rsm_lab/variants/baseline.c). A variant is one of:
+ 
+   * patches/<part>.patch applied in order, e.g. "A+B" applies A.patch and
+     then B.patch to a temporary copy of the baseline;
+@@ -32,7 +31,10 @@ directory is rejected otherwise.  Every profile record carries a durable tag
+ (case, source size, seed) and, after annotation, chunk/warm-up/round columns.
+ 
+ --hot is cfg_bench's per-invocation warm-up: one unmeasured run of each case
+-before the measured -r 1 run. Warm-up is never a measured sample.
++before the measured -r 1 run. Warm-up is never a measured sample. In timing
++mode --hot-rounds selects how many warm-ups are used: 1 (default) appends --hot
++only to round 0's invocation, so each variant/workload/chunk gets one unmeasured
++warm-up plus the measured rounds; 0 appends it never.
+ """
+ 
+ from __future__ import annotations
+@@ -52,7 +54,7 @@ from pathlib import Path
+ 
+ LAB_DIR = Path(__file__).resolve().parent
+ LAGRAPH_DIR = LAB_DIR.parents[2]
+-DEFAULT_BASELINE = LAB_DIR / "variants" / "correctness_r2.c"
++DEFAULT_BASELINE = LAB_DIR / "variants" / "baseline.c"
+ DEFAULT_CFG_BENCH_DIR = Path.home() / "repo" / "CFG_bench"
+ DEFAULT_CONFIG = LAB_DIR / "configs" / "lab.csv"
+ 
+@@ -85,7 +87,7 @@ def parse_args() -> argparse.Namespace:
+         default=100,
+         help="experiment chunk size; 0 uses all start vertices in normal mode (default: 100)",
+     )
+-    parser.add_argument("--chunks", type=int, default=1, help="experiment chunks per run (default: 1)")
++    parser.add_argument("--chunks", type=int, default=30, help="experiment chunks per run (default: 30)")
+     parser.add_argument("--seed", type=int, default=2026, help="experiment source shuffle seed (default: 2026)")
+     parser.add_argument("--out", type=Path, help="output directory (default: build/runs/<timestamp>)")
+     parser.add_argument("--force", action="store_true", help="clear run-owned files in a nonempty output directory")
+@@ -99,7 +101,21 @@ def parse_args() -> argparse.Namespace:
+         default="-O2 -fPIC -shared -std=c11",
+         help="flags for variant shared libraries (default: %(default)s)",
+     )
+-    parser.add_argument("--threads", type=int, default=1, help="OMP_NUM_THREADS for cfg_bench (default: 1)")
++    parser.add_argument(
++        "--threads",
++        type=int,
++        default=0,
++        help="OMP thread mode: 0 = unrestricted library/runtime threading (default); "
++             "N > 0 sets OMP_NUM_THREADS=N explicitly",
++    )
++    parser.add_argument(
++        "--hot-rounds",
++        type=int,
++        choices=(0, 1),
++        default=1,
++        help="timing mode: append cfg_bench --hot to round 0 only when 1 (default: 1); "
++             "profile mode always uses its own --hot",
++    )
+     parser.add_argument(
+         "--jit-cache",
+         type=Path,
+@@ -151,6 +167,22 @@ def prepare_output_dir(out: Path, force: bool) -> None:
+             path.unlink()
+ 
+ 
++def thread_mode_description(threads: int) -> str:
++    if threads == 0:
++        return "unrestricted (OMP_NUM_THREADS and OMP_THREAD_LIMIT unset)"
++    return f"explicit OMP_NUM_THREADS={threads}"
++
++
++def apply_thread_mode(env: dict, threads: int) -> str:
++    """Apply --threads to a child environment; return the recorded mode."""
++    if threads == 0:
++        env.pop("OMP_NUM_THREADS", None)
++        env.pop("OMP_THREAD_LIMIT", None)
++    else:
++        env["OMP_NUM_THREADS"] = str(threads)
++    return thread_mode_description(threads)
++
++
+ def run(cmd: list[str], cwd: Path, log_path: Path, what: str, env: dict | None = None,
+         extra_env: dict | None = None) -> None:
+     log_path.parent.mkdir(parents=True, exist_ok=True)
+@@ -517,7 +549,8 @@ def write_provenance(args: argparse.Namespace, out: Path, cfg_bench: Path, confi
+         lines.append(f"profile_header: {header} sha256={sha256_file(header)}")
+     lines.append(f"compiler: {cxx_ident(sh([args.compiler, '--version'], args.lagraph.resolve()))}")
+     lines.append(f"cflags: {args.cflags}")
+-    lines.append(f"threads: OMP_NUM_THREADS={args.threads}")
++    lines.append(f"threads: {thread_mode_description(args.threads)}")
++    lines.append(f"hot_rounds: {args.hot_rounds} (timing mode appends --hot only to round 0 when 1)")
+     lines.append(f"machine: {sh(['uname', '-srm'], args.lagraph.resolve())}")
+     lines.append(f"nproc: {os.cpu_count()}")
+     cpu_model = ""
+@@ -532,8 +565,9 @@ def write_provenance(args: argparse.Namespace, out: Path, cfg_bench: Path, confi
+     jit_cache = args.jit_cache if args.jit_cache is not None else out / "jit-cache"
+     lines.append(f"jit_cache: {jit_cache}")
+     lines.append("jit_note: GRAPHBLAS_CACHE_PATH is set to the run-local cache; the JIT control is left "
+-                 "at the library default (ON); cfg_bench --hot performs one unmeasured warm-up call per "
+-                 "case before the measured -r 1 call")
++                 "at the library default (ON); in timing mode cfg_bench --hot is used only on round 0 "
++                 "when --hot-rounds=1, so each variant/workload/chunk has one unmeasured warm-up "
++                 "plus the measured rounds")
+     lines.append("")
+     lines.append("# input manifest (sha256:size:mtime, resolved under the CFG_bench checkout)")
+     input_lines = []
+@@ -616,7 +650,7 @@ def run_profile(args: argparse.Namespace, cfg_bench: Path, out: Path, pairs: lis
+         raise SystemExit("--profile requires --source-size > 0")
+     size = args.source_size
+     env = dict(os.environ)
+-    env["OMP_NUM_THREADS"] = str(args.threads)
++    apply_thread_mode(env, args.threads)
+     env["GRAPHBLAS_CACHE_PATH"] = str(args.jit_cache if args.jit_cache is not None else out / "jit-cache")
+     (out / "profile").mkdir(parents=True, exist_ok=True)
+     (out / "profile" / "configs").mkdir(parents=True, exist_ok=True)
+@@ -774,6 +808,8 @@ def main() -> int:
+     args.cfg_bench_dir = args.cfg_bench_dir.resolve()
+     if args.rounds <= 0:
+         raise SystemExit("--rounds must be positive")
++    if args.threads < 0:
++        raise SystemExit("--threads must be >= 0")
+     if args.source_size < 0 or args.chunks <= 0:
+         raise SystemExit("--source-size must be >= 0 and --chunks must be positive")
+     if not args.baseline.is_file():
+@@ -836,7 +872,7 @@ def main() -> int:
+ 
+     keys = expected_keys(pairs, args)
+     env = dict(os.environ)
+-    env["OMP_NUM_THREADS"] = str(args.threads)
++    apply_thread_mode(env, args.threads)
+     env["GRAPHBLAS_CACHE_PATH"] = str(args.jit_cache if args.jit_cache is not None else args.out / "jit-cache")
+     (args.out / "jit-cache").mkdir(parents=True, exist_ok=True)
+ 
+@@ -857,10 +893,12 @@ def main() -> int:
+                 str(libraries[spec]),
+                 "-r",
+                 "1",
+-                "--hot",
+                 "--results-file",
+                 str(csv_path),
+             ]
++            # one unmeasured warm-up in total: only round 0 may pass --hot
++            if args.hot_rounds == 1 and round_index == 0:
++                cmd.append("--hot")
+             if args.source_size > 0:
+                 cmd += [
+                     "--experiment",
+diff --git a/experimental/algorithm/cfpq_rsm_lab/tests/test_ds00.c b/experimental/algorithm/cfpq_rsm_lab/tests/test_ds00.c
+index 0984fe10..328f1f96 100644
+--- a/experimental/algorithm/cfpq_rsm_lab/tests/test_ds00.c
++++ b/experimental/algorithm/cfpq_rsm_lab/tests/test_ds00.c
+@@ -2575,9 +2575,10 @@ static void usage(const char *argv0)
+ {
+     fprintf(stderr,
+             "usage: %s [--no-random] [--cases N] [--seed S] [--verbose]\n"
++            "       %s --smoke\n"
+             "       %s --alloc-sweep [--max-budget N]\n"
+             "       %s --alloc-case=N\n",
+-            argv0, argv0, argv0);
++            argv0, argv0, argv0, argv0);
+ }
+ 
+ static void test_list(void)
+@@ -2602,6 +2603,7 @@ int main(int argc, char **argv)
+     int cases = 200;
+     uint64_t seed = 2026;
+     bool run_random = true;
++    bool smoke = false;
+     int max_budget = 4096;
+     bool alloc_sweep_mode = false;
+     const char *alloc_case_arg = NULL;
+@@ -2611,6 +2613,8 @@ int main(int argc, char **argv)
+         const char *a = argv[k];
+         if (strcmp(a, "--no-random") == 0)
+             run_random = false;
++        else if (strcmp(a, "--smoke") == 0)
++            smoke = true;
+         else if (strcmp(a, "--verbose") == 0)
+             g_verbose = true;
+         else if (strcmp(a, "--cases") == 0 && k + 1 < argc)
+@@ -2658,11 +2662,24 @@ int main(int argc, char **argv)
+     }
+     freeze_graphblas_environment();
+ 
+-    printf("DS-00 correctness harness: deterministic regressions\n");
+-    fflush(stdout);
+-    test_list();
++    if (smoke)
++    {
++        // --smoke: only the three existing functional regressions used for the
++        // R5 variant checks; no randomized or other suites.
++        printf("DS-00 correctness harness: smoke (single terminal, empty/zero, recursion)\n");
++        fflush(stdout);
++        test_single_terminal();
++        test_empty_and_zero();
++        test_recursion();
++    }
++    else
++    {
++        printf("DS-00 correctness harness: deterministic regressions\n");
++        fflush(stdout);
++        test_list();
++    }
+ 
+-    if (run_random)
++    if (run_random && !smoke)
+     {
+         printf("DS-00 correctness harness: %d randomized cases, base seed %llu\n", cases,
+                (unsigned long long)seed);
+@@ -2674,7 +2691,8 @@ int main(int argc, char **argv)
+ 
+     printf("\nchecks=%d failures=%d\n", g_checks, g_failures);
+     if (g_failures == 0)
+-        printf("PASS: deterministic regressions and randomized oracle cases\n");
++        printf("PASS: %s\n", smoke ? "--smoke checks"
++                                   : "deterministic regressions and randomized oracle cases");
+     else
+         printf("FAIL: %d check(s) failed\n", g_failures);
+     return g_failures == 0 ? 0 : 1;

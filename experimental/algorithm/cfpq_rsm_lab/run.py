@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build CFPQ RSM variants and compare them on the same inputs (DS-01-R2).
 
-The baseline is normally the frozen copy of the production source
-(experimental/algorithm/cfpq_rsm_lab/variants/baseline.c). A variant is one of:
+The baseline is resolved by variants/REGISTRY.csv to its exact frozen snapshot.
+Use make help in this directory for pinned comparisons. An explicit legacy variant is one of:
 
   * patches/<part>.patch applied in order, e.g. "A+B" applies A.patch and
     then B.patch to a temporary copy of the baseline;
@@ -40,6 +40,7 @@ warm-up plus the measured rounds; 0 appends it never.
 from __future__ import annotations
 
 import argparse
+import json
 import csv
 import datetime
 import hashlib
@@ -50,17 +51,19 @@ import shutil
 import statistics
 import subprocess
 import sys
+import labstate
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 LAB_DIR = Path(__file__).resolve().parent
 LAGRAPH_DIR = LAB_DIR.parents[2]
-DEFAULT_BASELINE = LAB_DIR / "variants" / "baseline.c"
+DEFAULT_BASELINE = labstate.source("baseline")
 DEFAULT_CFG_BENCH_DIR = Path.home() / "repo" / "CFG_bench"
-DEFAULT_CONFIG = LAB_DIR / "configs" / "lab.csv"
+DEFAULT_CONFIG = LAB_DIR / "configs" / "lab_batik.csv"
 
 # entries owned by a run; reused only with --force
 RUN_OWNED = ("summary.csv", "execution_status.tsv", "provenance.txt", "inputs.sha256", "raw",
-             "logs", "libs", "profile", "src", "jit-cache", "profile.csv", "profile-calls.csv")
+             "logs", "libs", "profile", "src", "jit-cache", "profile.csv", "profile-calls.csv", "pinned-inputs.json")
 
 PROFILE_REQUIRED_KEYS = (
     "tag", "call", "q", "v", "iters", "setup_s", "activity_s", "phase1_s", "phase2_3_s",
@@ -72,6 +75,8 @@ PROFILE_REQUIRED_KEYS = (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--lagraph", type=Path, default=LAGRAPH_DIR, help="LAGraph checkout (default: %(default)s)")
+    parser.add_argument("--input-manifest", type=Path, default=labstate.LOCK, help="pinned input/binary/recipe manifest (required for real comparisons)")
+    parser.add_argument("--allow-archived", action="store_true", help="explicitly allow a registered archived source")
     parser.add_argument("--baseline", type=Path, default=DEFAULT_BASELINE, help="baseline CFPQ RSM source")
     parser.add_argument("--patches-dir", type=Path, default=LAB_DIR / "patches", help="directory with *.patch files")
     parser.add_argument("--variants-dir", type=Path, default=LAB_DIR / "variants", help="directory with full *.c variants")
@@ -89,7 +94,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--chunks", type=int, default=30, help="experiment chunks per run (default: 30)")
     parser.add_argument("--seed", type=int, default=2026, help="experiment source shuffle seed (default: 2026)")
-    parser.add_argument("--out", type=Path, help="output directory (default: build/runs/<timestamp>)")
+    parser.add_argument("--out", type=Path, help="output directory (default: runs/<date>_direct)")
     parser.add_argument("--force", action="store_true", help="clear run-owned files in a nonempty output directory")
     parser.add_argument("--skip-cfg-build", action="store_true", help="do not run make in the CFG_bench checkout")
     parser.add_argument("--skip-variant-build", action="store_true", help="reuse existing libs/<variant>.so")
@@ -105,8 +110,9 @@ def parse_args() -> argparse.Namespace:
         "--threads",
         type=int,
         default=0,
-        help="OMP thread mode: 0 = unrestricted library/runtime threading (default); "
-             "N > 0 sets OMP_NUM_THREADS=N explicitly",
+        choices=[0],
+        help="legacy compatibility option: only 0 is accepted; always inherit the "
+             "OpenMP environment unchanged and let GraphBLAS/OpenMP choose threading",
     )
     parser.add_argument(
         "--hot-rounds",
@@ -128,6 +134,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="timing mode: record a failed pass and continue with the remaining schedule "
              "(default: stop on the first failure)",
+    )
+    parser.add_argument(
+        "--include-cfl-multsrc-adv",
+        action="store_true",
+        help="timing mode only: append one built-in CFL_multsrc_adv display after the RSM "
+             "displays (CFG_bench -a CFL_multsrc_adv -e -f -l -b); rejected in profile mode",
     )
     parser.add_argument(
         "--jit-cache",
@@ -181,18 +193,13 @@ def prepare_output_dir(out: Path, force: bool) -> None:
 
 
 def thread_mode_description(threads: int) -> str:
-    if threads == 0:
-        return "unrestricted (OMP_NUM_THREADS and OMP_THREAD_LIMIT unset)"
-    return f"explicit OMP_NUM_THREADS={threads}"
+    if threads != 0:
+        raise SystemExit('thread overrides are disabled; inherit the OpenMP environment unchanged')
+    return "inherited OpenMP environment unchanged; GraphBLAS/OpenMP choose threading"
 
 
 def apply_thread_mode(env: dict, threads: int) -> str:
-    """Apply --threads to a child environment; return the recorded mode."""
-    if threads == 0:
-        env.pop("OMP_NUM_THREADS", None)
-        env.pop("OMP_THREAD_LIMIT", None)
-    else:
-        env["OMP_NUM_THREADS"] = str(threads)
+    """Validate the legacy option without modifying the child environment."""
     return thread_mode_description(threads)
 
 
@@ -259,13 +266,18 @@ def build_cfg_bench(args: argparse.Namespace) -> Path:
 
 
 def variant_source(spec: str, args: argparse.Namespace, work_dir: Path) -> Path:
+    # Registered names win; flat variants/baseline.c can never shadow a control.
+    registered = args.variants_dir.resolve() == (LAB_DIR / "variants").resolve()
+    if registered and "+" not in spec:
+        return labstate.source(spec, allow_archived=getattr(args, "allow_archived", False))
     full = args.variants_dir / f"{spec}.c"
-    if full.is_file():
+    if not registered and full.is_file():
         return full.resolve()
 
     src_dir = work_dir / "src" / safe_name(spec)
     src_dir.mkdir(parents=True, exist_ok=True)
-    src = src_dir / "LAGraph_CFPQ_RSM.c"
+    src = src_dir / labstate.KERNEL
+    src.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(args.baseline, src)
     if spec == "baseline":
         return src.resolve()
@@ -293,9 +305,11 @@ def build_dependencies(args: argparse.Namespace, source: Path) -> list[Path]:
     ]
     profile_header = LAB_DIR / "variants" / "cfpq_profile.h"
     deps.append(profile_header)
+    # Include explicit -L paths used by the entry point, as well as defaults.
+    explicit_libdirs = [Path(flag[2:]) for flag in args.cflags.split() if flag.startswith("-L")]
     # library contents also invalidate a reused shared object
     for name in ("liblagraph.so", "libgraphblas.so"):
-        for base in (args.lagraph_lib_dir, Path("/usr/local/lib")):
+        for base in [args.lagraph_lib_dir, *explicit_libdirs, Path("/usr/local/lib")]:
             candidate = base / name
             if candidate.exists():
                 deps.append(candidate)
@@ -370,6 +384,10 @@ def config_input_paths(config: Path, cfg_dir: Path) -> list[Path]:
                 if not path.is_absolute():
                     path = cfg_dir / path
                 paths.append(path)
+                if index == 1:
+                    # CFG_bench derives the RSM path from the grammar basename.
+                    # It is an input to the query, not a build dependency.
+                    paths.append(path.with_suffix(".rsm"))
     return sorted(set(paths))
 
 
@@ -438,7 +456,8 @@ def add_result_row(results: dict, display: str, key: tuple, round_id: int, row: 
 
 
 def accept_rows(results: dict, expected: list[tuple], rounds: int,
-                baseline_display: str) -> tuple[list[str], dict]:
+                baseline_display: str,
+                skip_result_check: set[str] | None = None) -> tuple[list[str], dict]:
     """Shared acceptance for timing and profile modes.  Returns (problems, stats).
 
     results[display][key][round_id] -> cfg_bench row.  Every comparison is by
@@ -446,6 +465,7 @@ def accept_rows(results: dict, expected: list[tuple], rounds: int,
     """
     problems: list[str] = []
     stats: dict = {}
+    skip_result_check = skip_result_check or set()
     expected_set = set(expected)
     if baseline_display not in results:
         return [f"missing baseline variant {baseline_display}"], stats
@@ -467,6 +487,41 @@ def accept_rows(results: dict, expected: list[tuple], rounds: int,
                 problems.append(
                     f"{display}: case {key} has rounds {seen}, expected 0..{rounds - 1}"
                 )
+            if display in skip_result_check:
+                # Built-in comparator: completeness/execution are checked, but
+                # result counts and hashes are deliberately not compared.
+                counts = {}
+                hashes = {}
+                malformed = False
+                for round_id in seen:
+                    row = rounds_map[round_id]
+                    try:
+                        counts[round_id] = int(row["result"])
+                        hashes[round_id] = int(row["result_hash"] or 0)
+                    except (KeyError, TypeError, ValueError):
+                        malformed = True
+                times = [float(rounds_map[r]["time_s"]) for r in seen
+                         if "time_s" in rounds_map[r]]
+                memories = [float(rounds_map[r]["max_memory_kb"]) for r in seen
+                            if rounds_map[r].get("max_memory_kb") not in (None, "")]
+                status = "ok"
+                if seen != list(range(rounds)):
+                    status = "MISSING_ROUNDS"
+                elif malformed:
+                    status = "MALFORMED"
+                stats[(display, key)] = {
+                    "seen_rounds": seen,
+                    "counts": counts,
+                    "hashes": hashes,
+                    "times": times,
+                    "ref_times": [],
+                    "memories": memories,
+                    "ref_memories": [],
+                    "count_ok": None,
+                    "hash_ok": None,
+                    "status": status,
+                }
+                continue
             counts = {}
             hashes = {}
             ref_counts = {}
@@ -577,6 +632,24 @@ def write_provenance(args: argparse.Namespace, out: Path, cfg_bench: Path, confi
     lines.append(f"repo_status: {sh(['git', 'status', '--porcelain'], args.lagraph.resolve()).replace(chr(10), ' | ')}")
     lines.append(f"config: {config} sha256={sha256_file(config)}")
     lines.append(f"cfg_bench: {cfg_bench} sha256={sha256_file(cfg_bench)}")
+    lines.append(f"include_cfl_multsrc_adv: {int(args.include_cfl_multsrc_adv)}")
+    if args.include_cfl_multsrc_adv:
+        cfg_dir = args.cfg_bench_dir.resolve()
+        lines.append("cfl_comparator: CFL_multsrc_adv")
+        lines.append("cfl_flags: -e -f -l -b (optimization mask 15: EMPTY|FORMAT|LAZY|BLOCK)")
+        lines.append(f"cfl_entry_point: LAGraph_CFL_reachability_multsrc_adv (from the resolved liblagraphx)")
+        lines.append(f"cfg_bench_repo_commit: {sh(['git', 'rev-parse', 'HEAD'], cfg_dir)}")
+        lines.append(f"cfg_bench_repo_status: "
+                     f"{sh(['git', 'status', '--porcelain'], cfg_dir).replace(chr(10), ' | ')}")
+        adapter = cfg_dir / 'src' / 'adapters' / 'adapter_CFL_multsrc_adv.c'
+        adapter_identity = file_identity(adapter) if adapter.is_file() else 'unavailable'
+        lines.append(f"cfg_bench_adapter_CFL_multsrc_adv: {adapter} identity={adapter_identity}")
+        ldd = sh(['ldd', str(cfg_bench)], cfg_dir)
+        for entry in ldd.splitlines():
+            if any(name in entry for name in ('liblagraphx', 'liblagraph', 'libgraphblas')):
+                resolved = entry.split('=>')[-1].split('(')[0].strip()
+                identity = file_identity(Path(resolved)) if Path(resolved).exists() else 'unavailable'
+                lines.append(f"  {entry.strip()} identity={identity}")
     lines.append(f"runner: {Path(__file__).resolve()} sha256={sha256_file(Path(__file__).resolve())}")
     generator = LAB_DIR / "tests" / "make_profile_variant.py"
     if generator.is_file():
@@ -587,6 +660,8 @@ def write_provenance(args: argparse.Namespace, out: Path, cfg_bench: Path, confi
     lines.append(f"compiler: {cxx_ident(sh([args.compiler, '--version'], args.lagraph.resolve()))}")
     lines.append(f"cflags: {args.cflags}")
     lines.append(f"threads: {thread_mode_description(args.threads)}")
+    lines.append('openmp_environment: '+json.dumps(labstate.openmp_environment(), sort_keys=True))
+    lines.append('cpu_affinity: '+json.dumps(labstate.cpu_affinity()))
     lines.append(f"hot_rounds: {args.hot_rounds} (timing mode appends --hot only to round 0 when 1)")
     lines.append(f"order: {args.order}")
     lines.append(f"keep_going: {int(args.keep_going)}")
@@ -714,6 +789,8 @@ def run_profile(args: argparse.Namespace, cfg_bench: Path, out: Path, pairs: lis
             expected.add((graph, cnf, str(size), str(chunk)))
         tag = f"{slug}|s{size}|seed{args.seed}"
         for variant in ("reference", "profile"):
+            if getattr(args, "_pinned_lock", None) is not None:
+                labstate.verify_lock(args._pinned_lock, args._pinned_paths)
             results_csv = out / "profile" / f"results-{variant}-{slug}.csv"
             profile_path = out / "profile" / f"profile-{slug}.txt"
             if variant == "profile":
@@ -841,7 +918,8 @@ def run_profile(args: argparse.Namespace, cfg_bench: Path, out: Path, pairs: lis
 
 
 def collect_timing_pass(csv_path: Path, display: str, round_index: int,
-                        results: dict, expected_count: int | None) -> tuple[str, str]:
+                        results: dict, expected_count: int | None,
+                        expected_algo: str | None = None) -> tuple[str, str]:
     """Read one successful child's CSV and register it; return (outcome, detail)."""
     try:
         rows = read_rows(csv_path)
@@ -855,6 +933,11 @@ def collect_timing_pass(csv_path: Path, display: str, round_index: int,
     parsed: list[tuple[tuple, dict]] = []
     seen: set[tuple] = set()
     for row in rows:
+        if expected_algo is not None:
+            algo_name = (row.get("algo_name") or "").strip()
+            if algo_name != expected_algo:
+                return "malformed_csv", (
+                    f"{csv_path}: algo_name {algo_name!r} != scheduled {expected_algo!r}")
         try:
             key = (row["graph"], row["cnf"], row["source_size"], row["chunk"])
         except KeyError as exc:
@@ -875,6 +958,7 @@ def run_timing(args: argparse.Namespace, cfg_bench: Path, pairs: list[tuple[str,
                libraries: dict[str, Path], displays: list[tuple[str, str]]) -> int:
     """Execute the selected timing schedule and write the shared-run summary."""
     out = args.out
+    include_cfl = getattr(args, "include_cfl_multsrc_adv", False)
     keys = expected_keys(pairs, args)
     env = dict(os.environ)
     apply_thread_mode(env, args.threads)
@@ -895,22 +979,42 @@ def run_timing(args: argparse.Namespace, cfg_bench: Path, pairs: list[tuple[str,
             ["display", "spec", "round", "start", "finish", "exit_code", "outcome", "log"])
         status_file.flush()
         for round_index, display, spec in jobs:
+            if getattr(args, "_pinned_lock", None) is not None:
+                labstate.verify_lock(args._pinned_lock, args._pinned_paths)
             csv_path = out / "raw" / safe_name(display) / f"round{round_index}.csv"
             csv_path.parent.mkdir(parents=True, exist_ok=True)
             log_path = out / "logs" / safe_name(display) / f"round{round_index}.log"
-            cmd = [
-                str(cfg_bench),
-                "-c",
-                str(args.config),
-                "-a",
-                "CFL_CFPQ_RSM",
-                "--rsm-lib",
-                str(libraries[spec]),
-                "-r",
-                "1",
-                "--results-file",
-                str(csv_path),
-            ]
+            is_cfl = include_cfl and spec == "CFL_multsrc_adv"
+            if is_cfl:
+                cmd = [
+                    str(cfg_bench),
+                    "-c",
+                    str(args.config),
+                    "-a",
+                    "CFL_multsrc_adv",
+                    "-e",
+                    "-f",
+                    "-l",
+                    "-b",
+                    "-r",
+                    "1",
+                    "--results-file",
+                    str(csv_path),
+                ]
+            else:
+                cmd = [
+                    str(cfg_bench),
+                    "-c",
+                    str(args.config),
+                    "-a",
+                    "CFL_CFPQ_RSM",
+                    "--rsm-lib",
+                    str(libraries[spec]),
+                    "-r",
+                    "1",
+                    "--results-file",
+                    str(csv_path),
+                ]
             # one unmeasured warm-up per display: only that display's round 0
             # may pass --hot
             if args.hot_rounds == 1 and round_index == 0:
@@ -936,8 +1040,11 @@ def run_timing(args: argparse.Namespace, cfg_bench: Path, pairs: list[tuple[str,
                 outcome, detail = "child_failed", f"child exited {rc}"
             else:
                 expected_count = len(keys) if keys is not None else None
+                expected_algo = None
+                if include_cfl:
+                    expected_algo = "CFL_multsrc_adv" if is_cfl else "CFL_CFPQ_RSM"
                 outcome, detail = collect_timing_pass(
-                    csv_path, display, round_index, results, expected_count)
+                    csv_path, display, round_index, results, expected_count, expected_algo)
             status_writer.writerow(
                 [display, spec, round_index, start, finish, rc, outcome, log_path])
             status_file.flush()
@@ -962,7 +1069,9 @@ def run_timing(args: argparse.Namespace, cfg_bench: Path, pairs: list[tuple[str,
             print(message, file=sys.stderr)
             execution_failed = True
         keys = sorted(base_keys)
-    problems, stats = accept_rows(results, list(keys), args.rounds, baseline_display)
+    skip_result_check = {"CFL_multsrc_adv"} if include_cfl else None
+    problems, stats = accept_rows(results, list(keys), args.rounds, baseline_display,
+                                  skip_result_check)
 
     base_copies = [display for display, spec in displays if spec == args.baseline_variant]
     noise = 0.0
@@ -1026,8 +1135,8 @@ def run_timing(args: argparse.Namespace, cfg_bench: Path, pairs: list[tuple[str,
                 "ratio": f"{ratio:.6f}",
                 "result": max(stat["counts"].values()) if stat["counts"] else 0,
                 "result_hash": max(stat["hashes"].values()) if stat["hashes"] else 0,
-                "count_ok": int(stat["count_ok"]),
-                "hash_ok": int(stat["hash_ok"]),
+                "count_ok": int(stat["count_ok"]) if stat["count_ok"] is not None else "",
+                "hash_ok": int(stat["hash_ok"]) if stat["hash_ok"] is not None else "",
                 "status": stat["status"],
                 "median_memory_kb": f"{median(stat['memories']):.1f}" if stat["memories"] else "0",
                 "min_memory_kb": f"{min(stat['memories']):.1f}" if stat["memories"] else "0",
@@ -1093,21 +1202,29 @@ def main() -> int:
     args.cfg_bench_dir = args.cfg_bench_dir.resolve()
     if args.rounds <= 0:
         raise SystemExit("--rounds must be positive")
-    if args.threads < 0:
-        raise SystemExit("--threads must be >= 0")
+    thread_mode_description(args.threads)
     if args.source_size < 0 or args.chunks <= 0:
         raise SystemExit("--source-size must be >= 0 and --chunks must be positive")
     if not args.baseline.is_file():
         raise SystemExit(f"baseline not found: {args.baseline}")
+    if not args.profile and "CFPQ_RSM_PROFILE" in getattr(args, "cflags", ""):
+        raise SystemExit("profiling flags are forbidden in uninstrumented timing mode")
+    if args.profile and args.include_cfl_multsrc_adv:
+        raise SystemExit("--include-cfl-multsrc-adv is not valid with --profile")
 
     if args.out is None:
-        stamp = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d_%H-%M-%S")
-        args.out = LAB_DIR / "build" / "runs" / stamp
+        stamp = datetime.datetime.now(ZoneInfo("Europe/Moscow")).strftime("%Y-%m-%d_%H-%M-%S-%f")
+        args.out = LAB_DIR / "runs" / (stamp + "_direct")
     args.out = args.out.resolve()
     prepare_output_dir(args.out, args.force)
 
     input_paths = check_config(args.config, args.cfg_bench_dir)
     pairs = read_config_pairs(args.config)
+    pinned = labstate.validate_run(args, input_paths)
+    args._pinned_lock = pinned
+    args._pinned_paths = [str(p.resolve()) for p in input_paths] + [str(args.config)]
+    if pinned is not None:
+        (args.out / "pinned-inputs.json").write_text(args.input_manifest.read_text())
     cfg_bench = build_cfg_bench(args)
 
     sources: dict[str, Path] = {}
@@ -1120,7 +1237,9 @@ def main() -> int:
              str(profile_source)],
             check=True,
         )
-        sources["baseline"] = variant_source("baseline", args, args.out)
+        # The uninstrumented control must be the exact source just profiled,
+        # regardless of an unrelated baseline.c in --variants-dir.
+        sources["baseline"] = args.baseline
         libraries["baseline"] = build_variant("baseline", sources["baseline"], args, args.out)
         sources["profile"] = profile_source
         libraries["profile"] = build_variant("profile", profile_source, args, args.out,
@@ -1128,7 +1247,10 @@ def main() -> int:
         write_provenance(args, args.out, cfg_bench, args.config, libraries, sources, input_paths)
         # the reference for profile acceptance is the uninstrumented baseline build
         profile_libraries = {"reference": libraries["baseline"], "profile": libraries["profile"]}
-        return run_profile(args, cfg_bench, args.out, pairs, profile_libraries)
+        result = run_profile(args, cfg_bench, args.out, pairs, profile_libraries)
+        if pinned is not None:
+            labstate.verify_lock(pinned, [str(p.resolve()) for p in input_paths] + [str(args.config)])
+        return result
 
     specs = [spec.strip() for spec in args.variants.split(",") if spec.strip()]
     if not specs:
@@ -1146,6 +1268,10 @@ def main() -> int:
             libraries[spec] = build_variant(spec, sources[spec], args, args.out)
         print(f"variant {display}: {libraries[spec]}", flush=True)
 
+    if args.include_cfl_multsrc_adv:
+        # built-in CFG_bench algorithm: no RSM source, patch or shared library
+        displays.append(("CFL_multsrc_adv", "CFL_multsrc_adv"))
+
     baseline_display = next((display for display, spec in displays if spec == args.baseline_variant), None)
     if baseline_display is None:
         raise SystemExit(f"baseline variant '{args.baseline_variant}' is not in --variants")
@@ -1155,7 +1281,10 @@ def main() -> int:
         print(f"provenance: {args.out / 'provenance.txt'}")
         return 0
 
-    return run_timing(args, cfg_bench, pairs, libraries, displays)
+    result = run_timing(args, cfg_bench, pairs, libraries, displays)
+    if pinned is not None:
+        labstate.verify_lock(pinned, [str(p.resolve()) for p in input_paths] + [str(args.config)])
+    return result
 
 
 if __name__ == "__main__":

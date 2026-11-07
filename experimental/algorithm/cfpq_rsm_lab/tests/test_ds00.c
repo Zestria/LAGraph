@@ -1562,6 +1562,198 @@ static void test_indexed_families(void)
 }
 
 //------------------------------------------------------------------------------
+// deterministic regression: grouped terminal families
+//------------------------------------------------------------------------------
+//
+// These cases exercise the indexed-family grouping in the kernel: transitions
+// sharing one source state (forward families) or one destination state (dual
+// families).  A grouping mistake that loses transition, destination, or entry
+// identity changes the reachable set, so each case is compared with the
+// independent oracle by check_case.  The positive cases contain matched field
+// paths ending at distinct vertices; the negative case contains only a
+// mismatched load_0/store_1 path and must not accept it.
+
+static void test_grouped_families(void)
+{
+    // Two indexed fields with a recursive callee Alias = S.  The load family
+    // shares source state 0 and the store family shares destination state 0.
+    // Matched field paths end at 6 (load0/store0) and 10 (load1/store1).
+    // Mismatched load0/store1 would end at 5 and load1/store0 at 12.
+    Case java_like;
+    if (case_new(&java_like, /*Q=*/9, /*V=*/13, /*nt=*/6, /*nn=*/2, 0))
+    {
+        // terminals: load0=0, load1=1, store0=2, store1=3, alloc=4, assign=5
+        // box S: states 0..5, start 0, final 1
+        // box Alias: states 6..8, start 6, final 8
+        java_like.start_states[0] = 0;
+        java_like.start_states[1] = 6;
+        CHECK(case_term(&java_like, 0, 0, 2)); // 0 -load0-> 2
+        CHECK(case_term(&java_like, 1, 0, 3)); // 0 -load1-> 3
+        CHECK(case_term(&java_like, 2, 4, 0)); // 4 -store0-> 0
+        CHECK(case_term(&java_like, 3, 5, 0)); // 5 -store1-> 0
+        CHECK(case_term(&java_like, 4, 0, 1)); // 0 -alloc-> 1 (final)
+        CHECK(case_term(&java_like, 5, 0, 0)); // 0 -assign-> 0
+        CHECK(case_nonterm(&java_like, 0, 2, 4)); // 2 -Alias-> 4
+        CHECK(case_nonterm(&java_like, 0, 3, 5)); // 3 -Alias-> 5
+        CHECK(case_nonterm(&java_like, 1, 6, 8)); // Alias: 6 -S-> 8
+        CHECK(case_final(&java_like, 0, 1));
+        CHECK(case_final(&java_like, 1, 8));
+        // load0: 0->1; load1: 0->7
+        CHECK(case_graph(&java_like, 0, 0, 1));
+        CHECK(case_graph(&java_like, 1, 0, 7));
+        // store0: matched 2->3, mismatched for load1 8->11
+        CHECK(case_graph(&java_like, 2, 2, 3));
+        CHECK(case_graph(&java_like, 2, 8, 11));
+        // store1: matched 8->9, mismatched for load0 2->4
+        CHECK(case_graph(&java_like, 3, 8, 9));
+        CHECK(case_graph(&java_like, 3, 2, 4));
+        // alloc: inner calls at 1 and 7, outer completions
+        CHECK(case_graph(&java_like, 4, 1, 2));
+        CHECK(case_graph(&java_like, 4, 7, 8));
+        CHECK(case_graph(&java_like, 4, 3, 6));
+        CHECK(case_graph(&java_like, 4, 4, 5));
+        CHECK(case_graph(&java_like, 4, 9, 10));
+        CHECK(case_graph(&java_like, 4, 11, 12));
+        CHECK(case_graph(&java_like, 5, 0, 0)); // assign self-loop fallback
+        CHECK(check_case(&java_like, "grouped-two-field-recursive", "2,5,6,8,10,12"));
+        case_free(&java_like);
+    }
+
+    // The same grammar with only the mismatched load0/store1 path present.
+    // A correct query reaches 2 from source 1 via alloc, but never 4 from
+    // source 0 (4 is reachable only through the wrong store1 continuation).
+    Case mismatched_only;
+    if (case_new(&mismatched_only, /*Q=*/9, /*V=*/5, /*nt=*/6, /*nn=*/2, 0))
+    {
+        mismatched_only.start_states[0] = 0;
+        mismatched_only.start_states[1] = 6;
+        CHECK(case_term(&mismatched_only, 0, 0, 2));
+        CHECK(case_term(&mismatched_only, 1, 0, 3));
+        CHECK(case_term(&mismatched_only, 2, 4, 0));
+        CHECK(case_term(&mismatched_only, 3, 5, 0));
+        CHECK(case_term(&mismatched_only, 4, 0, 1));
+        CHECK(case_term(&mismatched_only, 5, 0, 0));
+        CHECK(case_nonterm(&mismatched_only, 0, 2, 4));
+        CHECK(case_nonterm(&mismatched_only, 0, 3, 5));
+        CHECK(case_nonterm(&mismatched_only, 1, 6, 8));
+        CHECK(case_final(&mismatched_only, 0, 1));
+        CHECK(case_final(&mismatched_only, 1, 8));
+        CHECK(case_graph(&mismatched_only, 0, 0, 1)); // load0 0->1
+        CHECK(case_graph(&mismatched_only, 4, 1, 2)); // alloc 1->2 (inner)
+        CHECK(case_graph(&mismatched_only, 3, 2, 3)); // store1 2->3
+        CHECK(case_graph(&mismatched_only, 4, 3, 4)); // alloc 3->4
+        CHECK(check_case(&mismatched_only, "grouped-two-field-mismatch", NULL));
+        case_free(&mismatched_only);
+    }
+
+    // Reverse families: the load_r family shares destination state 1 and the
+    // store_r family shares source state 1.  Matched paths end at 1, 8, 9;
+    // mismatched field continuations would end at 10 and 11.
+    Case reverse_like;
+    if (case_new(&reverse_like, /*Q=*/9, /*V=*/12, /*nt=*/6, /*nn=*/2, 0))
+    {
+        // terminals: alloc_r=0, store_r0=1, store_r1=2, load_r0=3, load_r1=4,
+        // assign_r=5
+        // box S: states 0..5, start 0, final 1
+        // box Alias: states 6..8, start 6, final 8
+        reverse_like.start_states[0] = 0;
+        reverse_like.start_states[1] = 6;
+        CHECK(case_term(&reverse_like, 0, 0, 1)); // 0 -alloc_r-> 1 (final)
+        CHECK(case_term(&reverse_like, 1, 1, 2)); // 1 -store_r0-> 2
+        CHECK(case_term(&reverse_like, 2, 1, 3)); // 1 -store_r1-> 3
+        CHECK(case_term(&reverse_like, 3, 4, 1)); // 4 -load_r0-> 1
+        CHECK(case_term(&reverse_like, 4, 5, 1)); // 5 -load_r1-> 1
+        CHECK(case_term(&reverse_like, 5, 1, 1)); // 1 -assign_r-> 1
+        CHECK(case_nonterm(&reverse_like, 0, 2, 4)); // 2 -Alias-> 4
+        CHECK(case_nonterm(&reverse_like, 0, 3, 5)); // 3 -Alias-> 5
+        CHECK(case_nonterm(&reverse_like, 1, 6, 8)); // Alias: 6 -S-> 8
+        CHECK(case_final(&reverse_like, 0, 1));
+        CHECK(case_final(&reverse_like, 1, 8));
+        CHECK(case_graph(&reverse_like, 0, 0, 1));  // alloc_r outer
+        CHECK(case_graph(&reverse_like, 0, 2, 6));  // alloc_r inner (entry 2)
+        CHECK(case_graph(&reverse_like, 0, 3, 7));  // alloc_r inner (entry 3)
+        CHECK(case_graph(&reverse_like, 1, 1, 2));  // store_r0
+        CHECK(case_graph(&reverse_like, 2, 1, 3));  // store_r1
+        CHECK(case_graph(&reverse_like, 3, 6, 8));  // load_r0 matched
+        CHECK(case_graph(&reverse_like, 3, 7, 11)); // load_r0 mismatched
+        CHECK(case_graph(&reverse_like, 4, 7, 9));  // load_r1 matched
+        CHECK(case_graph(&reverse_like, 4, 6, 10)); // load_r1 mismatched
+        CHECK(case_graph(&reverse_like, 5, 1, 1));  // assign_r self-loop
+        CHECK(check_case(&reverse_like, "grouped-reverse-two-field", "1,6,7,8,9"));
+        case_free(&reverse_like);
+    }
+
+    // Two labels whose graph relations share the same endpoint pair.  The
+    // compact columns must stay separated by transition identity; merging them
+    // would decode both through one destination and lose 3 or 4.
+    Case shared_endpoints;
+    if (case_new(&shared_endpoints, /*Q=*/5, /*V=*/6, /*nt=*/4, /*nn=*/1, 0))
+    {
+        // terminals: t0=0, t1=1, u=2, v=3
+        shared_endpoints.start_states[0] = 0;
+        CHECK(case_term(&shared_endpoints, 0, 0, 1)); // 0 -t0-> 1
+        CHECK(case_term(&shared_endpoints, 1, 0, 2)); // 0 -t1-> 2
+        CHECK(case_term(&shared_endpoints, 2, 1, 3)); // 1 -u-> 3 (final)
+        CHECK(case_term(&shared_endpoints, 3, 2, 4)); // 2 -v-> 4 (final)
+        CHECK(case_final(&shared_endpoints, 0, 3));
+        CHECK(case_final(&shared_endpoints, 0, 4));
+        CHECK(case_graph(&shared_endpoints, 0, 0, 5)); // t0: 0->5
+        CHECK(case_graph(&shared_endpoints, 1, 0, 5)); // t1: 0->5 (same edge)
+        CHECK(case_graph(&shared_endpoints, 2, 5, 3)); // u: 5->3
+        CHECK(case_graph(&shared_endpoints, 3, 5, 4)); // v: 5->4
+        CHECK(check_case(&shared_endpoints, "grouped-shared-endpoints", "3,4"));
+        case_free(&shared_endpoints);
+    }
+
+    // Multiple transitions under one label from the same source state.  Both
+    // must keep their own destination; a label-keyed compact column would
+    // decode only one of them.
+    Case same_label;
+    if (case_new(&same_label, /*Q=*/5, /*V=*/6, /*nt=*/4, /*nn=*/1, 0))
+    {
+        // terminals: t=0, u=1, v=2
+        same_label.start_states[0] = 0;
+        CHECK(case_term(&same_label, 0, 0, 1)); // 0 -t-> 1
+        CHECK(case_term(&same_label, 0, 0, 2)); // 0 -t-> 2 (same label)
+        CHECK(case_term(&same_label, 1, 1, 3)); // 1 -u-> 3 (final)
+        CHECK(case_term(&same_label, 2, 2, 4)); // 2 -v-> 4 (final)
+        CHECK(case_final(&same_label, 0, 3));
+        CHECK(case_final(&same_label, 0, 4));
+        CHECK(case_graph(&same_label, 0, 0, 5)); // t: 0->5
+        CHECK(case_graph(&same_label, 1, 5, 3)); // u: 5->3
+        CHECK(case_graph(&same_label, 2, 5, 4)); // v: 5->4
+        CHECK(check_case(&same_label, "grouped-same-label-destinations", "3,4"));
+        case_free(&same_label);
+    }
+
+    // Mixed grouped / ordinary transitions under the same label.  The forward
+    // family at source 0 covers a,b,c; the dual family at destination 2 covers
+    // t(1,2) and s(4,2); the t(3,5) transition must still use the ordinary path.
+    Case mixed;
+    if (case_new(&mixed, /*Q=*/6, /*V=*/8, /*nt=*/5, /*nn=*/1, 0))
+    {
+        // terminals: a=0, b=1, c=2, t=3, s=4
+        mixed.start_states[0] = 0;
+        CHECK(case_term(&mixed, 0, 0, 1)); // 0 -a-> 1
+        CHECK(case_term(&mixed, 1, 0, 4)); // 0 -b-> 4
+        CHECK(case_term(&mixed, 2, 0, 3)); // 0 -c-> 3
+        CHECK(case_term(&mixed, 3, 1, 2)); // 1 -t-> 2 (grouped dual)
+        CHECK(case_term(&mixed, 4, 4, 2)); // 4 -s-> 2 (grouped dual)
+        CHECK(case_term(&mixed, 3, 3, 5)); // 3 -t-> 5 (ordinary residual)
+        CHECK(case_final(&mixed, 0, 2));
+        CHECK(case_final(&mixed, 0, 5));
+        CHECK(case_graph(&mixed, 0, 0, 1)); // a: 0->1
+        CHECK(case_graph(&mixed, 1, 0, 4)); // b: 0->4
+        CHECK(case_graph(&mixed, 2, 0, 6)); // c: 0->6
+        CHECK(case_graph(&mixed, 3, 1, 2)); // t: 1->2
+        CHECK(case_graph(&mixed, 3, 6, 7)); // t: 6->7
+        CHECK(case_graph(&mixed, 4, 4, 5)); // s: 4->5
+        CHECK(check_case(&mixed, "grouped-mixed-fallback", "2,5,7"));
+        case_free(&mixed);
+    }
+}
+
+//------------------------------------------------------------------------------
 // deterministic regression: invalid input and overflow
 //------------------------------------------------------------------------------
 
@@ -2023,8 +2215,560 @@ static void test_malformed_dimensions(void)
 }
 
 //------------------------------------------------------------------------------
+// deterministic regressions: conservative trimming and internal compaction
+//------------------------------------------------------------------------------
+//
+// Each case is compared with the independent oracle, so a wrongly removed
+// state, final, or transition changes the exact reachable set.  The cases also
+// make a retained state observable through a live alternative branch, so
+// trimming must actually remove the dead intermediates without changing the
+// accepted destination set.
+
+static void test_trimming_compaction(void)
+{
+    // Empty load relation: states 1 and 2 are on a dead branch; the live
+    // 0 -other-> 3 path keeps states 0 and 3.
+    Case empty_load;
+    if (case_new(&empty_load, /*Q=*/4, /*V=*/4, /*nt=*/4, /*nn=*/1, 0))
+    {
+        // load=0, store=1, done=2, other=3
+        empty_load.start_states[0] = 0;
+        CHECK(case_term(&empty_load, 0, 0, 1));
+        CHECK(case_term(&empty_load, 1, 1, 2));
+        CHECK(case_term(&empty_load, 2, 2, 3));
+        CHECK(case_term(&empty_load, 3, 0, 3));
+        CHECK(case_final(&empty_load, 0, 3));
+        CHECK(case_graph(&empty_load, 1, 1, 2)); // store live
+        CHECK(case_graph(&empty_load, 2, 2, 3)); // done live
+        CHECK(case_graph(&empty_load, 3, 0, 3)); // other live
+        // load graph is empty: the 0-load->1-... branch must disappear
+        CHECK(check_case(&empty_load, "trim-empty-load", "3"));
+        case_free(&empty_load);
+    }
+
+    // Empty store relation, nonempty load: states 1 and 2 are dead.
+    Case empty_store;
+    if (case_new(&empty_store, /*Q=*/4, /*V=*/4, /*nt=*/4, /*nn=*/1, 0))
+    {
+        empty_store.start_states[0] = 0;
+        CHECK(case_term(&empty_store, 0, 0, 1));
+        CHECK(case_term(&empty_store, 1, 1, 2));
+        CHECK(case_term(&empty_store, 2, 2, 3));
+        CHECK(case_term(&empty_store, 3, 0, 3));
+        CHECK(case_final(&empty_store, 0, 3));
+        CHECK(case_graph(&empty_store, 0, 0, 1)); // load live
+        CHECK(case_graph(&empty_store, 2, 2, 3)); // done live
+        CHECK(case_graph(&empty_store, 3, 0, 2)); // other live
+        // store graph is empty
+        CHECK(check_case(&empty_store, "trim-empty-store", "2"));
+        case_free(&empty_store);
+    }
+
+    // Both load and store relations are empty.
+    Case both_empty;
+    if (case_new(&both_empty, /*Q=*/4, /*V=*/4, /*nt=*/4, /*nn=*/1, 0))
+    {
+        both_empty.start_states[0] = 0;
+        CHECK(case_term(&both_empty, 0, 0, 1));
+        CHECK(case_term(&both_empty, 1, 1, 2));
+        CHECK(case_term(&both_empty, 2, 2, 3));
+        CHECK(case_term(&both_empty, 3, 0, 3));
+        CHECK(case_final(&both_empty, 0, 3));
+        CHECK(case_graph(&both_empty, 2, 2, 3)); // done live
+        CHECK(case_graph(&both_empty, 3, 0, 3)); // other live
+        CHECK(check_case(&both_empty, "trim-both-empty", "3"));
+        case_free(&both_empty);
+    }
+
+    // Reverse family: alloc_r/load_r live, store_r empty.  The 2/3 branch is
+    // dead and the nullable Alias box is reached only through it.
+    Case reverse_dead;
+    if (case_new(&reverse_dead, /*Q=*/6, /*V=*/3, /*nt=*/3, /*nn=*/2, 0))
+    {
+        // alloc_r=0, store_r=1, load_r=2
+        reverse_dead.start_states[0] = 0;
+        reverse_dead.start_states[1] = 4;
+        CHECK(case_term(&reverse_dead, 0, 0, 1)); // alloc_r
+        CHECK(case_term(&reverse_dead, 1, 1, 2)); // store_r
+        CHECK(case_term(&reverse_dead, 2, 3, 1)); // load_r
+        CHECK(case_nonterm(&reverse_dead, 1, 2, 3)); // 2 -Alias-> 3
+        CHECK(case_nonterm(&reverse_dead, 0, 4, 5)); // Alias: 4 -S-> 5
+        CHECK(case_final(&reverse_dead, 0, 1));
+        CHECK(case_final(&reverse_dead, 1, 5));
+        CHECK(case_graph(&reverse_dead, 0, 0, 1)); // alloc_r live
+        CHECK(case_graph(&reverse_dead, 2, 1, 2)); // load_r live
+        // store_r graph is empty
+        CHECK(check_case(&reverse_dead, "trim-reverse-dead", "1"));
+        case_free(&reverse_dead);
+    }
+
+    // Dead recursive component: D has a self-loop but no path to its final,
+    // so its states and call site must be removed; the live other edge stays.
+    Case dead_recursive;
+    if (case_new(&dead_recursive, /*Q=*/7, /*V=*/2, /*nt=*/2, /*nn=*/2, 0))
+    {
+        // other=0, d=1; S states 0,1; D states 5,6
+        dead_recursive.start_states[0] = 0;
+        dead_recursive.start_states[1] = 5;
+        CHECK(case_term(&dead_recursive, 0, 0, 1)); // other -> final
+        CHECK(case_term(&dead_recursive, 1, 5, 5)); // D self-loop
+        CHECK(case_nonterm(&dead_recursive, 1, 0, 1)); // 0 -D-> 1
+        CHECK(case_final(&dead_recursive, 0, 1));
+        CHECK(case_final(&dead_recursive, 1, 6)); // unreachable
+        CHECK(case_graph(&dead_recursive, 0, 0, 1));
+        CHECK(case_graph(&dead_recursive, 1, 0, 0));
+        CHECK(check_case(&dead_recursive, "trim-dead-recursive", "1"));
+        case_free(&dead_recursive);
+    }
+
+    // Nullable callee: N is a single start-and-final state, so the accepted
+    // path 0 -load-> 1 -N-> 2 -final-> 1 must survive trimming.
+    Case nullable_callee;
+    if (case_new(&nullable_callee, /*Q=*/4, /*V=*/2, /*nt=*/1, /*nn=*/2, 0))
+    {
+        nullable_callee.start_states[0] = 0;
+        nullable_callee.start_states[1] = 3;
+        CHECK(case_term(&nullable_callee, 0, 0, 1)); // load
+        CHECK(case_nonterm(&nullable_callee, 1, 1, 2)); // 1 -N-> 2
+        CHECK(case_final(&nullable_callee, 0, 2));
+        CHECK(case_final(&nullable_callee, 1, 3));
+        CHECK(case_graph(&nullable_callee, 0, 0, 1));
+        CHECK(check_case(&nullable_callee, "trim-nullable-callee", "1"));
+        case_free(&nullable_callee);
+    }
+
+    // Start state is final: epsilon acceptance must survive even though the
+    // only terminal transition is inactive.
+    Case epsilon_start;
+    if (case_new(&epsilon_start, /*Q=*/2, /*V=*/2, /*nt=*/1, /*nn=*/1, 0))
+    {
+        epsilon_start.start_states[0] = 0;
+        CHECK(case_term(&epsilon_start, 0, 0, 1));
+        CHECK(case_final(&epsilon_start, 0, 0));
+        CHECK(case_final(&epsilon_start, 0, 1));
+        // graph is empty: the terminal branch is dead, epsilon remains
+        CHECK(check_case(&epsilon_start, "trim-start-final-epsilon", "0,1"));
+        case_free(&epsilon_start);
+    }
+
+    // NULL finals for one called box, multiple finals for another.  B's
+    // states must disappear; A's two finals must both remain reachable.
+    Case null_and_multi_finals;
+    if (case_new(&null_and_multi_finals, /*Q=*/6, /*V=*/3, /*nt=*/4, /*nn=*/3, 0))
+    {
+        // a=0, x=1, y=2, z=3; S states 0,1; A states 2,3,4; B state 5
+        null_and_multi_finals.start_states[0] = 0;
+        null_and_multi_finals.start_states[1] = 2;
+        null_and_multi_finals.start_states[2] = 5;
+        CHECK(case_term(&null_and_multi_finals, 0, 0, 1)); // a
+        CHECK(case_term(&null_and_multi_finals, 1, 2, 3)); // x
+        CHECK(case_term(&null_and_multi_finals, 2, 2, 4)); // y
+        CHECK(case_term(&null_and_multi_finals, 3, 5, 5)); // z (B self-loop)
+        CHECK(case_nonterm(&null_and_multi_finals, 1, 0, 1)); // 0 -A-> 1
+        CHECK(case_nonterm(&null_and_multi_finals, 2, 0, 1)); // 0 -B-> 1
+        CHECK(case_final(&null_and_multi_finals, 0, 1));
+        CHECK(case_final(&null_and_multi_finals, 1, 3));
+        CHECK(case_final(&null_and_multi_finals, 1, 4));
+        case_drop_finals(&null_and_multi_finals, 2);
+        CHECK(case_graph(&null_and_multi_finals, 0, 0, 1));
+        CHECK(case_graph(&null_and_multi_finals, 1, 0, 1));
+        CHECK(case_graph(&null_and_multi_finals, 2, 0, 2));
+        CHECK(case_graph(&null_and_multi_finals, 3, 2, 2));
+        CHECK(check_case(&null_and_multi_finals, "trim-null-multi-finals", "1,2"));
+        case_free(&null_and_multi_finals);
+    }
+
+    // Permuted, noncontiguous state ranges: S uses 4..6, A uses 0..2, state 7
+    // is dead.  Compaction must not assume contiguous box ranges.
+    Case permuted;
+    if (case_new(&permuted, /*Q=*/8, /*V=*/4, /*nt=*/2, /*nn=*/2, 0))
+    {
+        // t=0, x=1; S: 4 start, 6 final; A: 0 start, 2 final
+        permuted.start_states[0] = 4;
+        permuted.start_states[1] = 0;
+        CHECK(case_term(&permuted, 0, 4, 5)); // S t
+        CHECK(case_term(&permuted, 1, 0, 2)); // A x
+        CHECK(case_term(&permuted, 0, 7, 7)); // dead self-loop
+        CHECK(case_nonterm(&permuted, 1, 5, 6)); // 5 -A-> 6
+        CHECK(case_final(&permuted, 0, 6));
+        CHECK(case_final(&permuted, 1, 2));
+        CHECK(case_graph(&permuted, 0, 0, 1)); // t: 0->1
+        CHECK(case_graph(&permuted, 0, 2, 2)); // dead edge
+        CHECK(case_graph(&permuted, 1, 1, 3)); // x: 1->3
+        CHECK(check_case(&permuted, "trim-permuted-states", "3"));
+        case_free(&permuted);
+    }
+
+    // Shared state across boxes: state 2 is an intermediate state of both S
+    // and A.  Trimming and compaction must not assume that box state ranges are
+    // disjoint, while avoiding the ambiguous case where one box's start is
+    // another box's final (a pre-existing global-state semantics question).
+    Case shared_states;
+    if (case_new(&shared_states, /*Q=*/5, /*V=*/3, /*nt=*/4, /*nn=*/2, 0))
+    {
+        // t=0, u=1, v=2, w=3; shared state 2
+        // S: 0 start, 1 final; 0 -t-> 2 -u-> 1; 0 -A-> 1
+        // A: 3 start, 4 final; 3 -v-> 2 -w-> 4
+        shared_states.start_states[0] = 0;
+        shared_states.start_states[1] = 3;
+        CHECK(case_term(&shared_states, 0, 0, 2)); // t
+        CHECK(case_term(&shared_states, 1, 2, 1)); // u
+        CHECK(case_term(&shared_states, 2, 3, 2)); // v
+        CHECK(case_term(&shared_states, 3, 2, 4)); // w
+        CHECK(case_nonterm(&shared_states, 1, 0, 1)); // 0 -A-> 1
+        CHECK(case_final(&shared_states, 0, 1));
+        CHECK(case_final(&shared_states, 1, 4));
+        CHECK(case_graph(&shared_states, 0, 0, 1)); // t: 0->1
+        CHECK(case_graph(&shared_states, 1, 1, 2)); // u: 1->2
+        CHECK(case_graph(&shared_states, 2, 0, 1)); // v: 0->1
+        CHECK(case_graph(&shared_states, 3, 1, 2)); // w: 1->2
+        CHECK(check_case(&shared_states, "trim-shared-states", "2"));
+        case_free(&shared_states);
+    }
+
+    // Fully nonproductive start query: no accepting path from S's start, while
+    // another box's nullable final keeps the global analysis nonempty.
+    Case nonproductive;
+    if (case_new(&nonproductive, /*Q=*/4, /*V=*/2, /*nt=*/1, /*nn=*/2, 0))
+    {
+        // t=0; S states 0..2, start 0, final 1 (unreachable); A state 3
+        // nullable start/final
+        nonproductive.start_states[0] = 0;
+        nonproductive.start_states[1] = 3;
+        CHECK(case_term(&nonproductive, 0, 0, 2)); // t -> state 2
+        CHECK(case_nonterm(&nonproductive, 1, 0, 2)); // 0 -A-> 2
+        CHECK(case_final(&nonproductive, 0, 1));
+        CHECK(case_final(&nonproductive, 1, 3));
+        CHECK(case_graph(&nonproductive, 0, 0, 1));
+        // exact answer is empty from every source
+        CHECK(check_case(&nonproductive, "trim-nonproductive-start", ""));
+        case_free(&nonproductive);
+    }
+
+    // Malformed matrices on a branch that trimming would remove must still be
+    // rejected by the original validation, before compaction can hide them.
+    Case dead_branch_base;
+    if (case_new(&dead_branch_base, /*Q=*/3, /*V=*/2, /*nt=*/2, /*nn=*/2, 0))
+    {
+        // bad=0 (dead, empty graph), good=1 (live)
+        dead_branch_base.start_states[0] = 0;
+        dead_branch_base.start_states[1] = 0;
+        CHECK(case_term(&dead_branch_base, 0, 0, 2)); // bad
+        CHECK(case_term(&dead_branch_base, 1, 0, 1)); // good
+        CHECK(case_final(&dead_branch_base, 0, 1));
+        CHECK(case_graph(&dead_branch_base, 1, 0, 1));
+        CHECK(check_case(&dead_branch_base, "trim-dead-branch-base", "1"));
+
+        GrB_Index sources[1] = {0};
+        Case bad_term;
+        if (clone_with_term_shape(&bad_term, &dead_branch_base, 4, 4, 3, 0, true))
+        {
+            CHECK(expect_error_code(&bad_term, sources, 1, GrB_DIMENSION_MISMATCH,
+                                    "dead-branch malformed terminal"));
+            case_free(&bad_term);
+        }
+        Case bad_nonterm;
+        if (clone_with_nonterm_shape(&bad_nonterm, &dead_branch_base, 4, 4, 3, 0, true))
+        {
+            CHECK(expect_error_code(&bad_nonterm, sources, 1, GrB_DIMENSION_MISMATCH,
+                                    "dead-branch malformed nonterminal"));
+            case_free(&bad_nonterm);
+        }
+        case_free(&dead_branch_base);
+    }
+
+    // A malformed final vector on a box whose states trimming would remove.
+    Case dead_final_base;
+    if (case_new(&dead_final_base, /*Q=*/4, /*V=*/2, /*nt=*/1, /*nn=*/2, /*start_nonterm=*/1))
+    {
+        // box 0 (dead): states 2,3, start 2, final 3, self-loop 2 -t-> 2
+        // box 1 (S): states 0,1, start 0, final 1, 0 -t-> 1
+        dead_final_base.start_states[0] = 2;
+        dead_final_base.start_states[1] = 0;
+        CHECK(case_term(&dead_final_base, 0, 2, 2));
+        CHECK(case_term(&dead_final_base, 0, 0, 1));
+        CHECK(case_final(&dead_final_base, 0, 3));
+        CHECK(case_final(&dead_final_base, 1, 1));
+        CHECK(case_graph(&dead_final_base, 0, 0, 1));
+        CHECK(check_case(&dead_final_base, "trim-dead-final-base", "1"));
+
+        GrB_Index sources[1] = {0};
+        Case bad_final;
+        if (clone_with_final_length(&bad_final, &dead_final_base, 5, 3))
+        {
+            CHECK(expect_error_code(&bad_final, sources, 1, GrB_DIMENSION_MISMATCH,
+                                    "dead-branch malformed final"));
+            case_free(&bad_final);
+        }
+        case_free(&dead_final_base);
+    }
+}
+
+//------------------------------------------------------------------------------
+// deterministic regressions: destination-local waiting prefixes
+//------------------------------------------------------------------------------
+//
+// Every case has disjoint continuation suffixes, so a routing mistake that
+// returns a prefix to another destination changes the exact reachable set.
+// The cases cover distinct destinations, one shared destination, nonconsecutive
+// destination ids, zero/one/many destinations, when prefixes and summaries are
+// discovered in either order, nullable callees, and a no-caller start box.
+
+static void test_waiting_prefixes(void)
+{
+    // Two callers of A with distinct continuation destinations 2 and 4.
+    // Correct paths end at 5 and 6; cross routing would also reach 7 and 8.
+    Case distinct_dest;
+    if (case_new(&distinct_dest, /*Q=*/9, /*V=*/9, /*nt=*/5, /*nn=*/2, 0))
+    {
+        // terminals: t=0, s=1, u=2, v=3, x=4; S states 0..6, A states 7,8
+        distinct_dest.start_states[0] = 0;
+        distinct_dest.start_states[1] = 7;
+        CHECK(case_term(&distinct_dest, 0, 0, 1)); // t
+        CHECK(case_term(&distinct_dest, 1, 0, 3)); // s
+        CHECK(case_term(&distinct_dest, 2, 2, 6)); // u
+        CHECK(case_term(&distinct_dest, 3, 4, 6)); // v
+        CHECK(case_term(&distinct_dest, 4, 7, 8)); // A x
+        CHECK(case_nonterm(&distinct_dest, 1, 1, 2)); // 1 -A-> 2
+        CHECK(case_nonterm(&distinct_dest, 1, 3, 4)); // 3 -A-> 4
+        CHECK(case_final(&distinct_dest, 0, 6));
+        CHECK(case_final(&distinct_dest, 1, 8));
+        CHECK(case_graph(&distinct_dest, 0, 0, 1)); // t
+        CHECK(case_graph(&distinct_dest, 1, 0, 2)); // s
+        CHECK(case_graph(&distinct_dest, 2, 3, 5)); // u correct for dest 2
+        CHECK(case_graph(&distinct_dest, 2, 4, 8)); // u cross for dest 4
+        CHECK(case_graph(&distinct_dest, 3, 4, 6)); // v correct for dest 4
+        CHECK(case_graph(&distinct_dest, 3, 3, 7)); // v cross for dest 2
+        CHECK(case_graph(&distinct_dest, 4, 1, 3)); // x from entry 1
+        CHECK(case_graph(&distinct_dest, 4, 2, 4)); // x from entry 2
+        CHECK(check_case(&distinct_dest, "wait-distinct-destinations", "5,6"));
+        case_free(&distinct_dest);
+    }
+
+    // Many callers share one continuation destination (d_A = 1).
+    Case shared_dest;
+    if (case_new(&shared_dest, /*Q=*/6, /*V=*/6, /*nt=*/3, /*nn=*/2, 0))
+    {
+        // t=0, u=1, x=2; S states 0..3, A states 4,5
+        shared_dest.start_states[0] = 0;
+        shared_dest.start_states[1] = 4;
+        CHECK(case_term(&shared_dest, 0, 0, 1)); // t
+        CHECK(case_term(&shared_dest, 1, 2, 3)); // u
+        CHECK(case_term(&shared_dest, 2, 4, 5)); // A x
+        CHECK(case_nonterm(&shared_dest, 1, 0, 2)); // 0 -A-> 2
+        CHECK(case_nonterm(&shared_dest, 1, 1, 2)); // 1 -A-> 2
+        CHECK(case_final(&shared_dest, 0, 3));
+        CHECK(case_final(&shared_dest, 1, 5));
+        CHECK(case_graph(&shared_dest, 0, 0, 1)); // t
+        CHECK(case_graph(&shared_dest, 1, 2, 4)); // u from current 2
+        CHECK(case_graph(&shared_dest, 1, 3, 5)); // u from current 3
+        CHECK(case_graph(&shared_dest, 2, 0, 2)); // x from entry 0
+        CHECK(case_graph(&shared_dest, 2, 1, 3)); // x from entry 1
+        CHECK(check_case(&shared_dest, "wait-shared-destination", "4,5"));
+        case_free(&shared_dest);
+    }
+
+    // Summary-before-prefix: the first call site appears in an early sweep, the
+    // second only after t.  Cross suffixes 7 and 8 must remain unreachable.
+    Case summary_first;
+    if (case_new(&summary_first, /*Q=*/7, /*V=*/9, /*nt=*/4, /*nn=*/2, 0))
+    {
+        // t=0, u=1, v=2, x=3; S states 0..4, A states 5,6
+        summary_first.start_states[0] = 0;
+        summary_first.start_states[1] = 5;
+        CHECK(case_term(&summary_first, 0, 0, 2)); // t
+        CHECK(case_term(&summary_first, 1, 1, 4)); // u
+        CHECK(case_term(&summary_first, 2, 3, 4)); // v
+        CHECK(case_term(&summary_first, 3, 5, 6)); // A x
+        CHECK(case_nonterm(&summary_first, 1, 0, 1)); // 0 -A-> 1
+        CHECK(case_nonterm(&summary_first, 1, 2, 3)); // 2 -A-> 3
+        CHECK(case_final(&summary_first, 0, 4));
+        CHECK(case_final(&summary_first, 1, 6));
+        CHECK(case_graph(&summary_first, 0, 0, 1)); // t
+        CHECK(case_graph(&summary_first, 1, 2, 3)); // u correct for dest 1
+        CHECK(case_graph(&summary_first, 1, 4, 8)); // u cross for dest 3
+        CHECK(case_graph(&summary_first, 2, 4, 6)); // v correct for dest 3
+        CHECK(case_graph(&summary_first, 2, 2, 7)); // v cross for dest 1
+        CHECK(case_graph(&summary_first, 3, 0, 2)); // x from entry 0
+        CHECK(case_graph(&summary_first, 3, 1, 4)); // x from entry 1
+        CHECK(check_case(&summary_first, "wait-summary-before-prefix", "3,6,8"));
+        case_free(&summary_first);
+    }
+
+    // Nullable callee with distinct continuation destinations; cross suffixes
+    // 5 and 6 must remain unreachable.
+    Case nullable_wait;
+    if (case_new(&nullable_wait, /*Q=*/7, /*V=*/7, /*nt=*/4, /*nn=*/2, 0))
+    {
+        // t=0, s=1, u=2, v=3; S states 0..5, A state 6 (nullable)
+        nullable_wait.start_states[0] = 0;
+        nullable_wait.start_states[1] = 6;
+        CHECK(case_term(&nullable_wait, 0, 0, 2)); // t
+        CHECK(case_term(&nullable_wait, 1, 0, 4)); // s
+        CHECK(case_term(&nullable_wait, 2, 3, 1)); // u
+        CHECK(case_term(&nullable_wait, 3, 5, 1)); // v
+        CHECK(case_nonterm(&nullable_wait, 1, 2, 3)); // 2 -A-> 3
+        CHECK(case_nonterm(&nullable_wait, 1, 4, 5)); // 4 -A-> 5
+        CHECK(case_final(&nullable_wait, 0, 1));
+        CHECK(case_final(&nullable_wait, 1, 6));
+        CHECK(case_graph(&nullable_wait, 0, 0, 1)); // t
+        CHECK(case_graph(&nullable_wait, 1, 0, 2)); // s
+        CHECK(case_graph(&nullable_wait, 2, 1, 3)); // u correct for dest 3
+        CHECK(case_graph(&nullable_wait, 2, 2, 5)); // u cross for dest 5
+        CHECK(case_graph(&nullable_wait, 3, 2, 4)); // v correct for dest 5
+        CHECK(case_graph(&nullable_wait, 3, 1, 6)); // v cross for dest 3
+        CHECK(check_case(&nullable_wait, "wait-nullable-distinct", "3,4"));
+        case_free(&nullable_wait);
+    }
+
+    // No-caller start box: the start box's nonterminal matrix is NULL, so it has
+    // d_A = 0 and no waiting prefixes, but its summary is still needed.
+    Case no_caller_start;
+    if (case_new(&no_caller_start, /*Q=*/2, /*V=*/3, /*nt=*/1, /*nn=*/1, 0))
+    {
+        no_caller_start.start_states[0] = 0;
+        CHECK(case_term(&no_caller_start, 0, 0, 1));
+        CHECK(case_final(&no_caller_start, 0, 1));
+        CHECK(case_graph(&no_caller_start, 0, 0, 1));
+        case_drop_nonterm(&no_caller_start, 0);
+        CHECK(check_case(&no_caller_start, "wait-no-caller-start", "1"));
+        case_free(&no_caller_start);
+    }
+}
+
+//------------------------------------------------------------------------------
+// deterministic regressions: fused return plus unique terminal continuation
+//------------------------------------------------------------------------------
+//
+// These cases put eligible and ineligible return destinations side by side in
+// one callee, so the fused and ordinary paths must agree with the oracle.
+// Structural instrumentation (recorded in DEEPSEEK_FEEDBACK.md) confirms that
+// the final/start/terminal-arrival/multiple-exit destinations are not fused.
+
+static void test_fused_continuations(void)
+{
+    // q=3 is a single-exit terminal continuation and is fused; q=5 is a final
+    // of S and must stay ordinary.  Both are destinations of the same callee.
+    Case mixed;
+    if (case_new(&mixed, /*Q=*/8, /*V=*/7, /*nt=*/5, /*nn=*/2, 0))
+    {
+        // t=0, s=1, u=2, v=3, x=4; S states 0..5, A states 6,7
+        mixed.start_states[0] = 0;
+        mixed.start_states[1] = 6;
+        CHECK(case_term(&mixed, 0, 0, 2)); // t
+        CHECK(case_term(&mixed, 1, 0, 4)); // s
+        CHECK(case_term(&mixed, 2, 3, 1)); // u
+        CHECK(case_term(&mixed, 3, 5, 1)); // v
+        CHECK(case_term(&mixed, 4, 6, 7)); // A x
+        CHECK(case_nonterm(&mixed, 1, 2, 3)); // 2 -A-> 3
+        CHECK(case_nonterm(&mixed, 1, 4, 5)); // 4 -A-> 5
+        CHECK(case_final(&mixed, 0, 1));
+        CHECK(case_final(&mixed, 0, 5));
+        CHECK(case_final(&mixed, 1, 7));
+        CHECK(case_graph(&mixed, 0, 0, 1)); // t
+        CHECK(case_graph(&mixed, 1, 0, 2)); // s
+        CHECK(case_graph(&mixed, 2, 3, 5)); // u (fused continuation)
+        CHECK(case_graph(&mixed, 3, 4, 6)); // v (ordinary final continuation)
+        CHECK(case_graph(&mixed, 4, 1, 3)); // x from entry 1
+        CHECK(case_graph(&mixed, 4, 2, 4)); // x from entry 2
+        CHECK(check_case(&mixed, "fuse-mixed-final", "4,5,6"));
+        case_free(&mixed);
+    }
+
+    // Fallback topologies in one callee: destination 2 is a fused single-exit
+    // continuation; 3 is an S final; 4 has a terminal arrival (r); 5 is a box
+    // start/final and has two exits.  Only destination 2 may be fused.
+    Case fallback;
+    if (case_new(&fallback, /*Q=*/9, /*V=*/7, /*nt=*/7, /*nn=*/3, 0))
+    {
+        // x=0, u=1, v=2, w=3, y1=4, y2=5, r=6
+        // S states 0..6, A states 7,8, B start/final state 5
+        fallback.start_states[0] = 0;
+        fallback.start_states[1] = 7;
+        fallback.start_states[2] = 5;
+        CHECK(case_term(&fallback, 0, 7, 8)); // A x
+        CHECK(case_term(&fallback, 1, 2, 1)); // u
+        CHECK(case_term(&fallback, 2, 3, 1)); // v
+        CHECK(case_term(&fallback, 3, 4, 1)); // w
+        CHECK(case_term(&fallback, 4, 5, 1)); // y1
+        CHECK(case_term(&fallback, 5, 5, 1)); // y2
+        CHECK(case_term(&fallback, 6, 0, 4)); // r: terminal arrival at 4
+        CHECK(case_nonterm(&fallback, 1, 0, 2)); // 0 -A-> 2
+        CHECK(case_nonterm(&fallback, 1, 0, 3)); // 0 -A-> 3
+        CHECK(case_nonterm(&fallback, 1, 0, 4)); // 0 -A-> 4
+        CHECK(case_nonterm(&fallback, 1, 0, 5)); // 0 -A-> 5
+        CHECK(case_final(&fallback, 0, 1));
+        CHECK(case_final(&fallback, 0, 3));
+        CHECK(case_final(&fallback, 1, 8));
+        CHECK(case_final(&fallback, 2, 5));
+        CHECK(case_graph(&fallback, 0, 0, 1)); // x: 0->1
+        CHECK(case_graph(&fallback, 1, 1, 2)); // u
+        CHECK(case_graph(&fallback, 2, 1, 3)); // v
+        CHECK(case_graph(&fallback, 3, 1, 4)); // w from current 1
+        CHECK(case_graph(&fallback, 3, 5, 6)); // w from current 5 (r path)
+        CHECK(case_graph(&fallback, 4, 1, 5)); // y1
+        CHECK(case_graph(&fallback, 5, 1, 6)); // y2
+        CHECK(case_graph(&fallback, 6, 0, 5)); // r: 0->5
+        CHECK(check_case(&fallback, "fuse-fallback-topology", "1,2,3,4,5,6"));
+        case_free(&fallback);
+    }
+}
+
+//------------------------------------------------------------------------------
 // deterministic regressions: dense, cyclic and parallel label derivations
 //------------------------------------------------------------------------------
+
+static void test_review_regressions(void)
+{
+    // Grouped labels may share a destination and graph endpoint. They can
+    // share compact columns, but another destination at that endpoint cannot.
+    Case shared;
+    if (case_new(&shared, 4, 5, 5, 1, 0))
+    {
+        shared.start_states[0] = 0;
+        CHECK(case_term(&shared, 0, 0, 1));
+        CHECK(case_term(&shared, 1, 0, 1));
+        CHECK(case_term(&shared, 2, 0, 2));
+        CHECK(case_term(&shared, 3, 1, 3));
+        CHECK(case_term(&shared, 4, 2, 3));
+        CHECK(case_final(&shared, 0, 3));
+        CHECK(case_graph(&shared, 0, 0, 1));
+        CHECK(case_graph(&shared, 1, 0, 1));
+        CHECK(case_graph(&shared, 1, 0, 2));
+        CHECK(case_graph(&shared, 2, 0, 1));
+        CHECK(case_graph(&shared, 3, 1, 3));
+        CHECK(case_graph(&shared, 3, 2, 4));
+        CHECK(case_graph(&shared, 4, 1, 2));
+        CHECK(check_case(&shared, "review-shared-endpoint-distinct-state", "2,3,4"));
+        case_free(&shared);
+    }
+
+    // A has no fusible return; B has both an eligible suffix and a recursive
+    // ordinary return. Nullable summaries and later deltas exercise both the
+    // handle-swap fallback and repeated discovery of active fused blocks.
+    Case recursive;
+    if (case_new(&recursive, 6, 6, 2, 3, 0))
+    {
+        recursive.start_states[0] = 0;
+        recursive.start_states[1] = 4;
+        recursive.start_states[2] = 5;
+        CHECK(case_nonterm(&recursive, 1, 0, 1));
+        CHECK(case_nonterm(&recursive, 2, 1, 2));
+        CHECK(case_nonterm(&recursive, 2, 5, 5));
+        CHECK(case_term(&recursive, 0, 5, 5));
+        CHECK(case_term(&recursive, 1, 2, 3));
+        CHECK(case_final(&recursive, 0, 3));
+        CHECK(case_final(&recursive, 1, 4));
+        CHECK(case_final(&recursive, 2, 5));
+        CHECK(case_graph(&recursive, 0, 0, 1));
+        CHECK(case_graph(&recursive, 0, 1, 2));
+        CHECK(case_graph(&recursive, 1, 0, 3));
+        CHECK(case_graph(&recursive, 1, 1, 4));
+        CHECK(case_graph(&recursive, 1, 2, 5));
+        CHECK(check_case(&recursive, "review-nullable-recursive-fusion-fallback", "3,4,5"));
+        case_free(&recursive);
+    }
+}
 
 static void test_dense_relations(void)
 {
@@ -2344,9 +3088,10 @@ static void test_random(uint64_t base_seed, int count)
 // allocation-failure sweep (LG_brutal_* / GxB_init tracking allocator)
 //------------------------------------------------------------------------------
 
-// Small instance used by the sweep: exercises Phase 1 terminals, Phase 2/3
-// calls, Phase 4 summary extraction for a box with NULL incoming calls, and
-// Phase 4 returns for a box with waiting configurations.
+// Small instance used by the sweep: exercises Phase 1 terminals (ordinary and
+// grouped families), Phase 2/3 calls, Phase 4 summary extraction for a box with
+// NULL incoming calls, Phase 4 returns for a box with waiting configurations,
+// and the grouped-family preprocessing/gather allocations.
 static bool build_alloc_case(Case *c)
 {
     // alphabet: a=0, b=1, c=2, d=3; V=8 as in the mutual-recursion case
@@ -2361,6 +3106,11 @@ static bool build_alloc_case(Case *c)
     CHECK(case_term(c, 2, 4, 5));
     CHECK(case_nonterm(c, 0, 5, 6));
     CHECK(case_term(c, 3, 6, 7));
+    // grouped families: source 0 has a(0,1) and c(0,2), c(0,6); destination 1
+    // has a(0,1) and a(4,1).  Both families need a nonempty graph support.
+    CHECK(case_term(c, 0, 4, 1));
+    CHECK(case_term(c, 2, 0, 2));
+    CHECK(case_term(c, 2, 0, 6));
     c->start_states[0] = 0;
     c->start_states[1] = 4;
     c->start_states[2] = 8;
@@ -2370,8 +3120,11 @@ static bool build_alloc_case(Case *c)
     // S has NULL incoming calls: its summary must still be extracted
     case_drop_nonterm(c, 0);
     CHECK(case_graph(c, 0, 0, 1));
+    CHECK(case_graph(c, 0, 4, 5));
     CHECK(case_graph(c, 2, 1, 2));
     CHECK(case_graph(c, 0, 2, 3));
+    CHECK(case_graph(c, 2, 0, 1));
+    CHECK(case_graph(c, 2, 0, 7));
     CHECK(case_graph(c, 1, 3, 4));
     CHECK(case_graph(c, 3, 4, 5));
     CHECK(case_graph(c, 1, 5, 6));
@@ -2477,9 +3230,9 @@ static int alloc_case_main(const char *arg)
 
 // Run one child process per budget.  The parent never initializes LAGraph or
 // GraphBLAS, so each child starts from a pristine address space.  Children run
-// in small parallel waves to keep the sweep time reasonable (each child pays a
-// fresh GraphBLAS init); OMP_NUM_THREADS=1 avoids oversubscription.
-#define ALLOC_SWEEP_WIDTH 8
+// sequentially, each retaining the inherited OpenMP environment and the
+// runtime's own parallelism. Do not impose a thread cap on sweep children.
+#define ALLOC_SWEEP_WIDTH 1
 
 static int alloc_sweep(int max_budget)
 {
@@ -2516,7 +3269,6 @@ static int alloc_sweep(int max_budget)
             }
             if (pid == 0)
             {
-                setenv("OMP_NUM_THREADS", "1", 1);
                 execl(self, self, arg, (char *)NULL);
                 fprintf(stderr, "alloc-sweep: exec failed: %s\n", strerror(errno));
                 _exit(127);
@@ -2593,8 +3345,13 @@ static void test_list(void)
     test_repeated_sources();
     test_stored_false();
     test_indexed_families();
+    test_grouped_families();
     test_invalid_input();
     test_malformed_dimensions();
+    test_trimming_compaction();
+    test_review_regressions();
+    test_waiting_prefixes();
+    test_fused_continuations();
     test_dense_relations();
 }
 

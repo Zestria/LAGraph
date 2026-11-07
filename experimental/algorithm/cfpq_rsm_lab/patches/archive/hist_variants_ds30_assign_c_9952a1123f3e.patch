@@ -1,0 +1,33 @@
+--- a/experimental/algorithm/LAGraph_CFPQ_RSM.c
++++ b/experimental/algorithm/LAGraph_CFPQ_RSM.c
+@@ -395,7 +395,8 @@
+                     LG_TRY(s_mul_acc(acc, scratch, graph_nt[i], s_temp));
+                 
+                 // RETURN bookkeeping: W[i] == reshape(R_i' * P)
+-                GRB_TRY(GrB_eWiseAdd(W[i], GrB_NULL, GrB_NULL, GrB_LOR, W[i], scratch, GrB_NULL));
++                GRB_TRY(GrB_Matrix_assign_BOOL(W[i], scratch, GrB_NULL, true,
++                                               GrB_ALL, Q * V, GrB_ALL, V, GrB_DESC_S));
+             }
+             LG_TRY(s_unshift(scratch, Q, V));
+         }
+@@ -432,8 +433,8 @@
+                 }
+             }
+ 
+-            GRB_TRY(GrB_eWiseAdd(graph_nt[i], GrB_NULL, GrB_NULL, GrB_LOR, graph_nt[i], new_edges,
+-                                 GrB_NULL));
++            GRB_TRY(GrB_Matrix_assign_BOOL(graph_nt[i], new_edges, GrB_NULL, true,
++                                           GrB_ALL, V, GrB_ALL, V, GrB_DESC_S));
+ 
+             // acc |= W * dG, where W = R_A^T * P
+             if (W[i] != GrB_NULL)
+@@ -452,7 +453,8 @@
+         GRB_TRY(GxB_Matrix_reshapeDup(&M_new, acc, false, Q, V * V, GrB_NULL));
+         GRB_TRY(GrB_Matrix_clear(acc));
+         GRB_TRY(GrB_eWiseAdd(M_new, P, GrB_NULL, GrB_LOR, M_new, M_call, GrB_DESC_RSC));
+-        GRB_TRY(GrB_eWiseAdd(P, GrB_NULL, GrB_NULL, GrB_LOR, P, M_new, GrB_NULL));
++        GRB_TRY(GrB_Matrix_assign_BOOL(P, M_new, GrB_NULL, true,
++                                       GrB_ALL, Q, GrB_ALL, V * V, GrB_DESC_S));
+ 
+         GrB_Matrix swap = M;
+         M = M_new;

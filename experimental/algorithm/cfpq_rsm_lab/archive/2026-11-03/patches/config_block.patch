@@ -1,0 +1,634 @@
+--- a/baseline.c
++++ b/config_block.c
+@@ -14,6 +14,16 @@
+         {                                                                                          \
+             for (size_t _k = 0; _k < (len); ++_k)                                                  \
+                 GrB_free(&(array)[_k]);                                                            \
++            LAGraph_Free((void **)&(array), NULL);                                                 \
++        }                                                                                          \
++    }
++
++#define FREE_ROUTE_ARRAY(array, len)                                                               \
++    {                                                                                              \
++        if ((array) != NULL)                                                                       \
++        {                                                                                          \
++            for (size_t _k = 0; _k < (len); ++_k)                                                  \
++                s_route_free(&(array)[_k]);                                                        \
+             LAGraph_Free((void **)&(array), NULL);                                                 \
+         }                                                                                          \
+     }
+@@ -27,20 +37,33 @@
+         GrB_free(&M_new);                                                                          \
+         GrB_free(&scratch);                                                                        \
+         GrB_free(&s_temp);                                                                         \
+-        GrB_free(&rowvec);                                                                         \
+         LAGraph_Free((void **)&term_active, NULL);                                                 \
+-        FREE_MATRIX_ARRAY(term_src, num_term);                                                     \
+-        LAGraph_Free((void **)&term_src_count, NULL);                                              \
+-        LAGraph_Free((void **)&active, NULL);                                                      \
+-        LAGraph_Free((void **)&active_idx, NULL);                                                  \
+-        LAGraph_Free((void **)&active_vals, NULL);                                                 \
++        FREE_ROUTE_ARRAY(route_term, num_term);                                                    \
++        FREE_ROUTE_ARRAY(route_nt, num_nonterm);                                                   \
++        LAGraph_Free((void **)&final_q_count, NULL);                                               \
++        FREE_MATRIX_ARRAY(final_q, num_nonterm);                                                   \
++        LAGraph_Free((void **)&fr_rows, NULL);                                                     \
++        LAGraph_Free((void **)&fr_cols, NULL);                                                     \
++        LAGraph_Free((void **)&fr_u, NULL);                                                        \
++        LAGraph_Free((void **)&fr_v, NULL);                                                        \
++        LAGraph_Free((void **)&bucket_start, NULL);                                                \
++        LAGraph_Free((void **)&bucket_pos, NULL);                                                  \
++        LAGraph_Free((void **)&bucket_order, NULL);                                                \
++        LAGraph_Free((void **)&route_i, NULL);                                                     \
++        LAGraph_Free((void **)&route_j, NULL);                                                     \
++        LAGraph_Free((void **)&route_x, NULL);                                                     \
++        LAGraph_Free((void **)&call_i, NULL);                                                      \
++        LAGraph_Free((void **)&call_j, NULL);                                                      \
++        LAGraph_Free((void **)&call_x, NULL);                                                      \
++        LAGraph_Free((void **)&dg_i, NULL);                                                        \
++        LAGraph_Free((void **)&dg_j, NULL);                                                        \
++        LAGraph_Free((void **)&dg_x, NULL);                                                        \
++        LAGraph_Free((void **)&extract_idx, NULL);                                                 \
+         GrB_free(&new_edges);                                                                      \
+-        GrB_free(&diag_entry);                                                                     \
+         GrB_free(&entry_vec);                                                                      \
+         GrB_free(&source_mask);                                                                    \
+         FREE_GRB_MATRIX_ARRAY(graph_nt, num_nonterm);                                              \
+         FREE_GRB_MATRIX_ARRAY(W, num_nonterm);                                                     \
+-        FREE_GRB_MATRIX_ARRAY(rsm_start, num_nonterm);                                             \
+     }
+ 
+ #define LG_FREE_ALL                                                                                \
+@@ -78,29 +101,145 @@
+     return (b != 0) && (a > limit / b);
+ }
+ 
+-// T = reshape(A' * M), QV x V.  A is Q x Q, M is Q x VV.
+-// T must be Q x VV on entry; its content is overwritten.
+-static GrB_Info s_shift(GrB_Matrix T, GrB_Matrix A, GrB_Matrix M, GrB_Index Q, GrB_Index V)
+-{
+-    H_TRY(GrB_mxm(T, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, A, M, GrB_DESC_T0));
+-    H_TRY(GxB_Matrix_reshape(T, false, Q * V, V, GrB_NULL));
+-    return GrB_SUCCESS;
+-}
+-
+-// Restore T to an empty Q x VV matrix; its content is dead, so clear it first
+-static GrB_Info s_unshift(GrB_Matrix T, GrB_Index Q, GrB_Index V)
+-{
+-    H_TRY(GrB_Matrix_clear(T));
+-    H_TRY(GxB_Matrix_reshape(T, false, Q, V * V, GrB_NULL));
+-    return GrB_SUCCESS;
+-}
+-
+ // C |= A * B, using one reused QV x V product temporary.
+ static GrB_Info s_mul_acc(GrB_Matrix C, GrB_Matrix A, GrB_Matrix B, GrB_Matrix T)
+ {
+     H_TRY(GrB_Matrix_clear(T));
+     H_TRY(GrB_mxm(T, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, A, B, GrB_NULL));
+     H_TRY(GrB_eWiseAdd(C, GrB_NULL, GrB_NULL, GrB_LOR, C, T, GrB_NULL));
++    return GrB_SUCCESS;
++}
++
++// Per-label RSM routing edges q -> r.  Repeated destination states are kept.
++typedef struct
++{
++    GrB_Index *src;
++    GrB_Index *dst;
++    GrB_Index count;
++} s_route;
++
++static int s_route_load(s_route *route, GrB_Matrix A, char *msg)
++{
++    memset(route, 0, sizeof(*route));
++    GrB_Index n = 0;
++    int rc = GrB_Matrix_nvals(&n, A);
++    if (rc != GrB_SUCCESS)
++        return rc;
++    if (n == 0)
++        return GrB_SUCCESS;
++    rc = LAGraph_Malloc((void **) &route->src, (size_t) n, sizeof(GrB_Index), msg);
++    if (rc != GrB_SUCCESS)
++        return rc;
++    rc = LAGraph_Malloc((void **) &route->dst, (size_t) n, sizeof(GrB_Index), msg);
++    if (rc != GrB_SUCCESS)
++    {
++        LAGraph_Free((void **) &route->src, msg);
++        return rc;
++    }
++    GrB_Index n2 = n;
++    rc = GrB_Matrix_extractTuples_BOOL(route->src, route->dst, NULL, &n2, A);
++    if (rc != GrB_SUCCESS)
++        return rc;
++    route->count = n2;
++    return GrB_SUCCESS;
++}
++
++static void s_route_free(s_route *route)
++{
++    LAGraph_Free((void **) &route->src, NULL);
++    LAGraph_Free((void **) &route->dst, NULL);
++    route->count = 0;
++}
++
++// Grow the reusable (I,J,X) tuple buffers to hold at least need entries.
++static GrB_Info s_tuple_reserve(GrB_Index **I, GrB_Index **J, bool **X, GrB_Index *cap,
++                                GrB_Index need, char *msg)
++{
++    if (need <= *cap)
++        return GrB_SUCCESS;
++    GrB_Index newcap = (*cap == 0) ? (GrB_Index) 64 : *cap;
++    while (newcap < need)
++        newcap *= 2;
++    int rc = LAGraph_Realloc((void **) I, (size_t) newcap, (size_t) *cap,
++                             sizeof(GrB_Index), msg);
++    if (rc != GrB_SUCCESS)
++        return (GrB_Info) rc;
++    rc = LAGraph_Realloc((void **) J, (size_t) newcap, (size_t) *cap,
++                         sizeof(GrB_Index), msg);
++    if (rc != GrB_SUCCESS)
++        return (GrB_Info) rc;
++    rc = LAGraph_Realloc((void **) X, (size_t) newcap, (size_t) *cap, sizeof(bool), msg);
++    if (rc != GrB_SUCCESS)
++        return (GrB_Info) rc;
++    *cap = newcap;
++    return GrB_SUCCESS;
++}
++
++// scratch = routed RSM shift for one label, QV x V, built from the frontier
++// buckets.  Every (q,r) edge contributes (r*V+u, v) for each (q*V+u, v)
++// frontier tuple; the build uses LOR for duplicate configurations.
++static GrB_Info s_route_build(GrB_Matrix scratch, const s_route *route,
++                              const GrB_Index *bucket_start, const GrB_Index *bucket_order,
++                              const GrB_Index *fr_u, const GrB_Index *fr_v,
++                              GrB_Index **ri, GrB_Index **rj, bool **rx,
++                              GrB_Index *rcount, GrB_Index *rcap, GrB_Index V, char *msg)
++{
++    *rcount = 0;
++    H_TRY(GrB_Matrix_clear(scratch));
++    for (GrB_Index e = 0; e < route->count; ++e)
++    {
++        GrB_Index q = route->src[e];
++        GrB_Index r = route->dst[e];
++        GrB_Index begin = bucket_start[q];
++        GrB_Index end = bucket_start[q + 1];
++        if (begin == end)
++            continue;
++        GrB_Index need = *rcount + (end - begin);
++        H_TRY(s_tuple_reserve(ri, rj, rx, rcap, need, msg));
++        for (GrB_Index t = begin; t < end; ++t)
++        {
++            GrB_Index k = bucket_order[t];
++            (*ri)[*rcount] = r * V + fr_u[k];
++            (*rj)[*rcount] = fr_v[k];
++            (*rx)[*rcount] = true;
++            (*rcount)++;
++        }
++    }
++    if (*rcount > 0)
++        H_TRY(GrB_Matrix_build_BOOL(scratch, *ri, *rj, *rx, *rcount, GrB_LOR));
++    return GrB_SUCCESS;
++}
++
++// new_edges = V x V summary candidates for one box, built from the frontier
++// buckets selected by that box's final states.
++static GrB_Info s_summary_build(GrB_Matrix new_edges, const GrB_Index *final_q,
++                                GrB_Index final_count, const GrB_Index *bucket_start,
++                                const GrB_Index *bucket_order, const GrB_Index *fr_u,
++                                const GrB_Index *fr_v, GrB_Index **di, GrB_Index **dj,
++                                bool **dx, GrB_Index *dcount, GrB_Index *dcap, char *msg)
++{
++    *dcount = 0;
++    H_TRY(GrB_Matrix_clear(new_edges));
++    for (GrB_Index f = 0; f < final_count; ++f)
++    {
++        GrB_Index q = final_q[f];
++        GrB_Index begin = bucket_start[q];
++        GrB_Index end = bucket_start[q + 1];
++        if (begin == end)
++            continue;
++        GrB_Index need = *dcount + (end - begin);
++        H_TRY(s_tuple_reserve(di, dj, dx, dcap, need, msg));
++        for (GrB_Index t = begin; t < end; ++t)
++        {
++            GrB_Index k = bucket_order[t];
++            (*di)[*dcount] = fr_u[k];
++            (*dj)[*dcount] = fr_v[k];
++            (*dx)[*dcount] = true;
++            (*dcount)++;
++        }
++    }
++    if (*dcount > 0)
++        H_TRY(GrB_Matrix_build_BOOL(new_edges, *di, *dj, *dx, *dcount, GrB_LOR));
+     return GrB_SUCCESS;
+ }
+ 
+@@ -123,7 +262,7 @@
+ {
+     LG_CLEAR_MSG;
+ 
+-    // working matrices / vectors
++    // working matrices / vectors (all configuration matrices are block QV x V)
+     GrB_Matrix M = GrB_NULL;
+     GrB_Matrix P = GrB_NULL;
+     GrB_Matrix acc = GrB_NULL;
+@@ -132,23 +271,52 @@
+     GrB_Matrix scratch = GrB_NULL;
+     GrB_Matrix s_temp = GrB_NULL; // QV x V product scratch for s_mul_acc
+     GrB_Matrix new_edges = GrB_NULL;
+-    GrB_Matrix diag_entry = GrB_NULL;
+     GrB_Vector entry_vec = GrB_NULL;
+     GrB_Vector source_mask = GrB_NULL;
+-    GrB_Vector rowvec = GrB_NULL; // length-Q row activity of M
+ 
+     GrB_Matrix *graph_nt = NULL;
+     GrB_Matrix *W = NULL;         // QV x V, W[i] = (rsm_nonterm[i])^T * P
+-    GrB_Matrix *rsm_start = NULL; // Q x 1, rsm_start[S][i] = true, iff start_states[S] = i
+     GrB_Index num_term = 0;
+     GrB_Index num_nonterm = 0;
+ 
+     bool *term_active = NULL;
+-    GrB_Index **term_src = NULL;
+-    size_t *term_src_count = NULL;
+-    bool *active = NULL;
+-    GrB_Index *active_idx = NULL;
+-    bool *active_vals = NULL;
++
++    // per-label RSM adjacency lists and per-box final-state q lists
++    s_route *route_term = NULL;
++    s_route *route_nt = NULL;
++    GrB_Index **final_q = NULL;
++    GrB_Index *final_q_count = NULL;
++
++    // reusable frontier extraction, bucketing and tuple buffers
++    GrB_Index *fr_rows = NULL;
++    GrB_Index *fr_cols = NULL;
++    GrB_Index *fr_u = NULL;
++    GrB_Index *fr_v = NULL;
++    GrB_Index *bucket_start = NULL;
++    GrB_Index *bucket_pos = NULL;
++    GrB_Index *bucket_order = NULL;
++    GrB_Index front_cap = 0;
++
++    GrB_Index *route_i = NULL;
++    GrB_Index *route_j = NULL;
++    bool *route_x = NULL;
++    GrB_Index route_count = 0;
++    GrB_Index route_cap = 0;
++
++    GrB_Index *call_i = NULL;
++    GrB_Index *call_j = NULL;
++    bool *call_x = NULL;
++    GrB_Index call_count = 0;
++    GrB_Index call_cap = 0;
++
++    GrB_Index *dg_i = NULL;
++    GrB_Index *dg_j = NULL;
++    bool *dg_x = NULL;
++    GrB_Index dg_count = 0;
++    GrB_Index dg_cap = 0;
++
++    GrB_Index *extract_idx = NULL;
++    GrB_Index extract_cap = 0;
+ 
+     LG_ASSERT(reachable != NULL, GrB_NULL_POINTER);
+     *reachable = GrB_NULL;
+@@ -249,7 +417,6 @@
+ 
+     LG_TRY(LAGraph_Calloc((void **)&graph_nt, num_nonterm, sizeof(GrB_Matrix), msg));
+     LG_TRY(LAGraph_Calloc((void **)&W, num_nonterm, sizeof(GrB_Matrix), msg));
+-    LG_TRY(LAGraph_Calloc((void **)&rsm_start, num_nonterm, sizeof(GrB_Matrix), msg));
+ 
+     for (size_t i = 0; i < num_nonterm; ++i)
+     {
+@@ -258,26 +425,54 @@
+             continue;
+ 
+         GRB_TRY(GrB_Matrix_new(&W[i], GrB_BOOL, Q * V, V));
+-        GRB_TRY(GrB_Matrix_new(&rsm_start[i], GrB_BOOL, Q, 1));
+-        GRB_TRY(GrB_Matrix_setElement_BOOL(rsm_start[i], true, start_states[i], 0));
+-    }
+-
+-    // allocate working matrices
+-    GRB_TRY(GrB_Matrix_new(&M, GrB_BOOL, Q, V * V));
+-    GRB_TRY(GrB_Matrix_new(&acc, GrB_BOOL, Q*V, V));
+-    GRB_TRY(GrB_Matrix_new(&M_call, GrB_BOOL, Q, V * V));
+-    GRB_TRY(GrB_Matrix_new(&scratch, GrB_BOOL, Q, V * V));
++    }
++
++    // per-label routing lists and per-box final-state lists
++    if (num_term > 0)
++        LG_TRY(LAGraph_Calloc((void **)&route_term, num_term, sizeof(s_route), msg));
++    LG_TRY(LAGraph_Calloc((void **)&route_nt, num_nonterm, sizeof(s_route), msg));
++    LG_TRY(LAGraph_Calloc((void **)&final_q, num_nonterm, sizeof(GrB_Index *), msg));
++    LG_TRY(LAGraph_Calloc((void **)&final_q_count, num_nonterm, sizeof(GrB_Index), msg));
++
++    for (size_t i = 0; i < num_nonterm; ++i)
++    {
++        if (rsm_nonterm[i] != GrB_NULL)
++            LG_TRY(s_route_load(&route_nt[i], rsm_nonterm[i], msg));
++
++        if (final_states[i] == GrB_NULL)
++            continue;
++        GrB_Index fn = 0;
++        GRB_TRY(GrB_Vector_nvals(&fn, final_states[i]));
++        if (fn == 0)
++            continue;
++        LG_TRY(LAGraph_Malloc((void **)&final_q[i], (size_t) fn, sizeof(GrB_Index), msg));
++        GrB_Index fn2 = fn;
++        GRB_TRY(GrB_Vector_extractTuples_BOOL(final_q[i], NULL, &fn2, final_states[i]));
++        final_q_count[i] = fn2;
++    }
++
++    // allocate working matrices; everything except the graph summaries and
++    // new_edges is block QV x V
++    GRB_TRY(GrB_Matrix_new(&M, GrB_BOOL, Q * V, V));
++    GRB_TRY(GrB_Matrix_new(&acc, GrB_BOOL, Q * V, V));
++    GRB_TRY(GrB_Matrix_new(&M_call, GrB_BOOL, Q * V, V));
++    GRB_TRY(GrB_Matrix_new(&M_new, GrB_BOOL, Q * V, V));
++    GRB_TRY(GrB_Matrix_new(&scratch, GrB_BOOL, Q * V, V));
+     GRB_TRY(GrB_Matrix_new(&s_temp, GrB_BOOL, Q * V, V));
+-    GRB_TRY(GrB_Matrix_new(&new_edges, GrB_BOOL, 1, V * V));
+-    // there is no need to create matrix for diag_entry
++    GRB_TRY(GrB_Matrix_new(&new_edges, GrB_BOOL, V, V));
+     GRB_TRY(GrB_Vector_new(&entry_vec, GrB_BOOL, V));
+     GRB_TRY(GrB_Vector_new(&source_mask, GrB_BOOL, V));
+ 
++    if (Q > 0)
++    {
++        LG_TRY(LAGraph_Calloc((void **)&bucket_start, (size_t) Q + 1,
++                              sizeof(GrB_Index), msg));
++        LG_TRY(LAGraph_Calloc((void **)&bucket_pos, (size_t) Q, sizeof(GrB_Index), msg));
++    }
++
+     if (num_term > 0)
+     {
+         LG_TRY(LAGraph_Calloc((void **) &term_active, num_term, sizeof(bool), msg));
+-        LG_TRY(LAGraph_Calloc((void **) &term_src, num_term, sizeof(GrB_Index *), msg));
+-        LG_TRY(LAGraph_Calloc((void **) &term_src_count, num_term, sizeof(size_t), msg));
+ 
+         for (size_t i = 0; i < num_term; ++i)
+         {
+@@ -291,29 +486,16 @@
+                 continue;
+ 
+             term_active[i] = true;
+-            LG_TRY(LAGraph_Malloc((void **) &term_src[i], rn, sizeof(GrB_Index), msg));
+-            GrB_Index rn2 = rn;
+-            GRB_TRY(GrB_Matrix_extractTuples_BOOL(term_src[i], NULL, NULL, &rn2, rsm_term[i]));
+-            term_src_count[i] = (size_t) rn2;
+-        }
+-    }
+-
+-    if (Q > 0)
+-    {
+-        GRB_TRY(GrB_Vector_new(&rowvec, GrB_BOOL, Q));
+-        LG_TRY(LAGraph_Malloc((void **) &active, Q, sizeof(bool), msg));
+-        LG_TRY(LAGraph_Malloc((void **) &active_idx, Q, sizeof(GrB_Index), msg));
+-        LG_TRY(LAGraph_Malloc((void **) &active_vals, Q, sizeof(bool), msg));
+-        for (GrB_Index i = 0; i < Q; ++i)
+-            active[i] = false;
+-    }
+-
+-    // each source s starts a call to the start nonterminal at (s, s)
++            LG_TRY(s_route_load(&route_term[i], rsm_term[i], msg));
++        }
++    }
++
++    // each source s starts a call at block row start_state*V+s, column s
+     GrB_Index start_state = start_states[start_nonterm];
+     for (size_t i = 0; i < num_sources; ++i)
+     {
+         GrB_Index s = sources[i];
+-        GRB_TRY(GrB_Matrix_setElement_BOOL(M, true, start_state, s * V + s));
++        GRB_TRY(GrB_Matrix_setElement_BOOL(M, true, start_state * V + s, s));
+         GRB_TRY(GrB_Vector_setElement_BOOL(source_mask, true, s));
+     }
+     GRB_TRY(GrB_Matrix_dup(&P, M));
+@@ -322,100 +504,143 @@
+     GRB_TRY(GrB_Matrix_nvals(&m_nvals, M));
+     while (m_nvals > 0)
+     {
+-        // mark rows of M that currently contain any true entry.
+-        if (Q > 0)
+-        {
+-            GRB_TRY(GrB_Vector_clear(rowvec));
+-            GRB_TRY(GrB_reduce(rowvec, GrB_NULL, GrB_NULL, GrB_LOR_MONOID_BOOL, M, GrB_NULL));
+-            GrB_Index nactive = 0;
+-            GRB_TRY(GrB_Vector_nvals(&nactive, rowvec));
+-            GrB_Index nactive2 = nactive;
+-            GRB_TRY(GrB_Vector_extractTuples_BOOL(active_idx, active_vals, &nactive2, rowvec));
+-            memset(active, 0, (size_t) Q * sizeof(bool));
+-            for (GrB_Index k = 0; k < nactive2; ++k)
+-                active[active_idx[k]] = true;
+-        }
+-
+-        // Phase 1: terminal transitions.  T = A_i^T * M is nonempty only if
+-        // some source state of A_i is an active row of M, so whole chains can
+-        // be skipped before the shift.
++        // Extract the block frontier once, decode (q*V+u, v) and bucket the
++        // tuples by state q for all routing in this iteration.
++        if (m_nvals > front_cap)
++        {
++            LG_TRY(LAGraph_Realloc((void **) &fr_rows, (size_t) m_nvals,
++                                   (size_t) front_cap, sizeof(GrB_Index), msg));
++            LG_TRY(LAGraph_Realloc((void **) &fr_cols, (size_t) m_nvals,
++                                   (size_t) front_cap, sizeof(GrB_Index), msg));
++            LG_TRY(LAGraph_Realloc((void **) &fr_u, (size_t) m_nvals,
++                                   (size_t) front_cap, sizeof(GrB_Index), msg));
++            LG_TRY(LAGraph_Realloc((void **) &fr_v, (size_t) m_nvals,
++                                   (size_t) front_cap, sizeof(GrB_Index), msg));
++            LG_TRY(LAGraph_Realloc((void **) &bucket_order, (size_t) m_nvals,
++                                   (size_t) front_cap, sizeof(GrB_Index), msg));
++            front_cap = m_nvals;
++        }
++        GrB_Index front_n = m_nvals;
++        GRB_TRY(GrB_Matrix_extractTuples_BOOL(fr_rows, fr_cols, NULL, &front_n, M));
++
++        memset(bucket_start, 0, (size_t) (Q + 1) * sizeof(GrB_Index));
++        for (GrB_Index k = 0; k < front_n; ++k)
++        {
++            GrB_Index q = fr_rows[k] / V;
++            fr_u[k] = fr_rows[k] % V;
++            fr_v[k] = fr_cols[k];
++            bucket_start[q + 1]++;
++        }
++        for (GrB_Index q = 0; q < Q; ++q)
++            bucket_start[q + 1] += bucket_start[q];
++        memcpy(bucket_pos, bucket_start, (size_t) Q * sizeof(GrB_Index));
++        for (GrB_Index k = 0; k < front_n; ++k)
++        {
++            GrB_Index q = fr_rows[k] / V;
++            bucket_order[bucket_pos[q]++] = k;
++        }
++
++        // Phase 1: terminal transitions, routed through the RSM edges
+         for (size_t i = 0; i < num_term; ++i)
+         {
+             if (!term_active[i])
+                 continue;
+ 
+-            bool predicted = false;
+-            for (size_t k = 0; k < term_src_count[i]; ++k)
+-            {
+-                if (active[term_src[i][k]])
+-                {
+-                    predicted = true;
+-                    break;
+-                }
+-            }
+-            if (!predicted)
+-                continue;
+-
+-            LG_TRY(s_shift(scratch, rsm_term[i], M, Q, V));
++            LG_TRY(s_route_build(scratch, &route_term[i], bucket_start, bucket_order,
++                                 fr_u, fr_v, &route_i, &route_j, &route_x,
++                                 &route_count, &route_cap, V, msg));
+             GrB_Index tn = 0;
+             GRB_TRY(GrB_Matrix_nvals(&tn, scratch));
+             if (tn > 0)
+                 LG_TRY(s_mul_acc(acc, scratch, graph_term[i], s_temp));
+-            LG_TRY(s_unshift(scratch, Q, V));
+         }
+ 
+         // Phases 2+3: nonterminal transitions and calls
+         GRB_TRY(GrB_Matrix_clear(M_call));
++        call_count = 0;
+         for (size_t i = 0; i < num_nonterm; ++i)
+         {
+             if (rsm_nonterm[i] == GrB_NULL)
+                 continue;
+ 
+-            // scratch = reshape(R_A^T * M), QV x V
+-            LG_TRY(s_shift(scratch, rsm_nonterm[i], M, Q, V));
++            LG_TRY(s_route_build(scratch, &route_nt[i], bucket_start, bucket_order,
++                                 fr_u, fr_v, &route_i, &route_j, &route_x,
++                                 &route_count, &route_cap, V, msg));
+ 
+             GrB_Index x_nvals = 0;
+             GRB_TRY(GrB_Matrix_nvals(&x_nvals, scratch));
+             if (x_nvals > 0)
+             {
+-                // call: every vertex v where X is nonzero enters nonterminal i
+-                // at (v, v), in its start state
++                // call: every entry vertex v enters nonterminal i at block
++                // row start_states[i]*V+v, column v
+                 GRB_TRY(GrB_reduce(entry_vec, GrB_NULL, GrB_NULL, GrB_LOR_MONOID_BOOL, scratch,
+                                    GrB_DESC_T0));
+-                GRB_TRY(GrB_Matrix_diag(&diag_entry, entry_vec, 0)); // V x V
+-                GRB_TRY(GxB_Matrix_reshape(diag_entry, false, 1, V * V, GrB_NULL));
+-                GRB_TRY(GrB_mxm(M_call, GrB_NULL, GrB_LOR, GrB_LOR_LAND_SEMIRING_BOOL,
+-                                rsm_start[i], diag_entry, GrB_NULL));
+-                GRB_TRY(GrB_free(&diag_entry));
++                GrB_Index entry_nvals = 0;
++                GRB_TRY(GrB_Vector_nvals(&entry_nvals, entry_vec));
++                if (entry_nvals > 0)
++                {
++                    if (entry_nvals > extract_cap)
++                    {
++                        LG_TRY(LAGraph_Realloc((void **) &extract_idx, (size_t) entry_nvals,
++                                               (size_t) extract_cap, sizeof(GrB_Index), msg));
++                        extract_cap = entry_nvals;
++                    }
++                    GrB_Index entry_nvals2 = entry_nvals;
++                    GRB_TRY(GrB_Vector_extractTuples_BOOL(extract_idx, NULL, &entry_nvals2,
++                                                          entry_vec));
++
++                    if (call_count + entry_nvals2 > call_cap)
++                    {
++                        GrB_Index new_cap = (call_count + entry_nvals2) * 2;
++                        LG_TRY(LAGraph_Realloc((void **) &call_i, (size_t) new_cap,
++                                               (size_t) call_cap, sizeof(GrB_Index), msg));
++                        LG_TRY(LAGraph_Realloc((void **) &call_j, (size_t) new_cap,
++                                               (size_t) call_cap, sizeof(GrB_Index), msg));
++                        LG_TRY(LAGraph_Realloc((void **) &call_x, (size_t) new_cap,
++                                               (size_t) call_cap, sizeof(bool), msg));
++                        call_cap = new_cap;
++                    }
++
++                    for (GrB_Index k = 0; k < entry_nvals2; ++k)
++                    {
++                        GrB_Index v = extract_idx[k];
++                        call_i[call_count] = start_states[i] * V + v;
++                        call_j[call_count] = v;
++                        call_x[call_count] = true;
++                        call_count++;
++                    }
++                }
+ 
+                 // skip over nonterminal i using the summary edges
+                 GrB_Index gnt_nvals = 0;
+                 GRB_TRY(GrB_Matrix_nvals(&gnt_nvals, graph_nt[i]));
+                 if (gnt_nvals > 0)
+                     LG_TRY(s_mul_acc(acc, scratch, graph_nt[i], s_temp));
+-                
++
+                 // RETURN bookkeeping: W[i] == reshape(R_i' * P)
+                 GRB_TRY(GrB_eWiseAdd(W[i], GrB_NULL, GrB_NULL, GrB_LOR, W[i], scratch, GrB_NULL));
+             }
+-            LG_TRY(s_unshift(scratch, Q, V));
+-        }
+-
+-        // Phase 4: return transitions
++        }
++
++        if (call_count > 0)
++        {
++            GRB_TRY(GrB_Matrix_build_BOOL(M_call, call_i, call_j, call_x, call_count,
++                                          GrB_LOR));
++        }
++
++        // Phase 4: return transitions, built from the same frontier buckets
+         for (size_t i = 0; i < num_nonterm; ++i)
+         {
+             if (final_states[i] == GrB_NULL)
+                 continue;
+ 
+-            // 1 x Q * Q x VV -> 1 x VV
+-            GRB_TRY(GrB_mxm(new_edges, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL,
+-                            (GrB_Matrix)final_states[i], M, GrB_DESC_T0));
+-
++            LG_TRY(s_summary_build(new_edges, final_q[i], final_q_count[i],
++                                   bucket_start, bucket_order, fr_u, fr_v,
++                                   &dg_i, &dg_j, &dg_x, &dg_count, &dg_cap, msg));
+             GrB_Index ne_vals = 0;
+             GRB_TRY(GrB_Matrix_nvals(&ne_vals, new_edges));
+             if (ne_vals == 0)
+                 continue;
+-
+-            GRB_TRY(GxB_Matrix_reshape(new_edges, false, V, V, GrB_NULL));
+ 
+             // dG = new_edges \ graph_nt[i]
+             GrB_Index gnt_nvals = 0;
+@@ -426,10 +651,7 @@
+                                   GrB_DESC_RSC));
+                 GRB_TRY(GrB_Matrix_nvals(&ne_vals, new_edges));
+                 if (ne_vals == 0)
+-                {
+-                    GRB_TRY(GxB_Matrix_reshape(new_edges, false, 1, V*V, GrB_NULL));
+                     continue;
+-                }
+             }
+ 
+             GRB_TRY(GrB_eWiseAdd(graph_nt[i], GrB_NULL, GrB_NULL, GrB_LOR, graph_nt[i], new_edges,
+@@ -443,16 +665,12 @@
+                 if (w_nvals > 0)
+                     LG_TRY(s_mul_acc(acc, W[i], new_edges, s_temp));
+             }
+-
+-            GRB_TRY(GxB_Matrix_reshape(new_edges, false, 1, V * V, GrB_NULL));
+-        }
+-
+-        // Phase 5: M_new = (reshape(acc) | M_call) \ P
+-        GRB_TRY(GrB_free(&M_new));
+-        GRB_TRY(GxB_Matrix_reshapeDup(&M_new, acc, false, Q, V * V, GrB_NULL));
++        }
++
++        // Phase 5: overwrite the block frontier, subtract P, union into P
++        GRB_TRY(GrB_eWiseAdd(M_new, P, GrB_NULL, GrB_LOR, acc, M_call, GrB_DESC_RSC));
++        GRB_TRY(GrB_eWiseAdd(P, GrB_NULL, GrB_NULL, GrB_LOR, P, M_new, GrB_NULL));
+         GRB_TRY(GrB_Matrix_clear(acc));
+-        GRB_TRY(GrB_eWiseAdd(M_new, P, GrB_NULL, GrB_LOR, M_new, M_call, GrB_DESC_RSC));
+-        GRB_TRY(GrB_eWiseAdd(P, GrB_NULL, GrB_NULL, GrB_LOR, P, M_new, GrB_NULL));
+ 
+         GrB_Matrix swap = M;
+         M = M_new;

@@ -1,0 +1,47 @@
+--- a/d1_native.c
++++ b/d3_masked_product.c
+@@ -97,11 +97,14 @@
+     return GrB_SUCCESS;
+ }
+ 
+-// C |= A * B, using one reused QV x V product temporary.
+-static GrB_Info s_mul_acc(GrB_Matrix C, GrB_Matrix A, GrB_Matrix B, GrB_Matrix T)
++// C |= A * B, using one reused QV x V product temporary.  The overwrite
++// product is masked by the block-shaped visited set P; the subsequent acc
++// union is unchanged.
++static GrB_Info s_mul_acc(GrB_Matrix C, GrB_Matrix A, GrB_Matrix B, GrB_Matrix T,
++                          GrB_Matrix P)
+ {
+     H_TRY(GrB_Matrix_clear(T));
+-    H_TRY(GrB_mxm(T, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, A, B, GrB_NULL));
++    H_TRY(GrB_mxm(T, P, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, A, B, GrB_DESC_RSC));
+     H_TRY(GrB_eWiseAdd(C, GrB_NULL, GrB_NULL, GrB_LOR, C, T, GrB_NULL));
+     return GrB_SUCCESS;
+ }
+@@ -365,7 +368,7 @@
+             GrB_Index tn = 0;
+             GRB_TRY(GrB_Matrix_nvals(&tn, scratch));
+             if (tn > 0)
+-                LG_TRY(s_mul_acc(acc, scratch, graph_term[i], s_temp));
++                LG_TRY(s_mul_acc(acc, scratch, graph_term[i], s_temp, P));
+             LG_TRY(s_unshift(scratch, Q, V));
+         }
+ 
+@@ -429,7 +432,7 @@
+                 GrB_Index gnt_nvals = 0;
+                 GRB_TRY(GrB_Matrix_nvals(&gnt_nvals, graph_nt[i]));
+                 if (gnt_nvals > 0)
+-                    LG_TRY(s_mul_acc(acc, scratch, graph_nt[i], s_temp));
++                    LG_TRY(s_mul_acc(acc, scratch, graph_nt[i], s_temp, P));
+                 
+                 // RETURN bookkeeping: W[i] == reshape(R_i' * P)
+                 GRB_TRY(GrB_eWiseAdd(W[i], GrB_NULL, GrB_NULL, GrB_LOR, W[i], scratch, GrB_NULL));
+@@ -485,7 +488,7 @@
+                 GrB_Index w_nvals = 0;
+                 GRB_TRY(GrB_Matrix_nvals(&w_nvals, W[i]));
+                 if (w_nvals > 0)
+-                    LG_TRY(s_mul_acc(acc, W[i], new_edges, s_temp));
++                    LG_TRY(s_mul_acc(acc, W[i], new_edges, s_temp, P));
+             }
+ 
+             GRB_TRY(GxB_Matrix_reshape(new_edges, false, 1, V * V, GrB_NULL));

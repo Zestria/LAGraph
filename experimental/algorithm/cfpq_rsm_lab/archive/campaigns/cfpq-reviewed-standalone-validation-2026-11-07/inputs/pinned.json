@@ -1,0 +1,478 @@
+{
+  "schema": 1,
+  "cfg_bench": {
+    "path": "/home/hollow/repo/LAGraph/experimental/algorithm/cfpq_rsm_lab/tooling/bin/cfg_bench__18b417d1ea39",
+    "sha256": "18b417d1ea3909404480af9db29a173e943d67c9efdfe553fd1f152b5c8a961b"
+  },
+  "cfg_bench_dir": "/home/hollow/repo/CFG_bench",
+  "runtime_files": [
+    "/home/hollow/repo/GraphBLAS/build/libgraphblas.so.10.5.2",
+    "/home/hollow/repo/LAGraph/build-exp-release/experimental/liblagraphx.so.1.2.2",
+    "/home/hollow/repo/LAGraph/build/src/liblagraph.so.1.2.1",
+    "/home/hollow/repo/LAGraph/include/LAGraph.h",
+    "/home/hollow/repo/LAGraph/include/LAGraphX.h",
+    "/home/hollow/repo/LAGraph/src/utility/LG_internal.h",
+    "/usr/lib/ld-linux-x86-64.so.2",
+    "/usr/lib/libc.so.6",
+    "/usr/lib/libgomp.so.1.0.0",
+    "/usr/lib/libm.so.6",
+    "/usr/local/include/suitesparse/GraphBLAS.h"
+  ],
+  "recipes": {
+    "smoke": {
+      "mode": "timing",
+      "config": "/home/hollow/repo/CFG_bench/configs/for_test.csv",
+      "source_sizes": [
+        1
+      ],
+      "chunks": 1,
+      "rounds": 1,
+      "seed": 2026,
+      "threads": 1,
+      "hot_rounds": 1,
+      "order": "blocked"
+    },
+    "profile_smoke": {
+      "mode": "profile",
+      "config": "/home/hollow/repo/CFG_bench/configs/for_test.csv",
+      "source_sizes": [
+        1
+      ],
+      "chunks": 1,
+      "rounds": 1,
+      "seed": 2026,
+      "threads": 1,
+      "hot_rounds": 1,
+      "order": "blocked"
+    },
+    "full": {
+      "mode": "timing",
+      "config": "/home/hollow/repo/LAGraph/experimental/algorithm/cfpq_rsm_lab/configs/lab_batik.csv",
+      "source_sizes": [
+        1,
+        10,
+        100
+      ],
+      "chunks": 30,
+      "rounds": 5,
+      "seed": 2026,
+      "threads": 1,
+      "hot_rounds": 1,
+      "order": "blocked"
+    },
+    "profile_workloads": {
+      "mode": "profile",
+      "config": "/home/hollow/repo/LAGraph/experimental/algorithm/cfpq_rsm_lab/configs/lab_batik.csv",
+      "source_sizes": [
+        1,
+        10,
+        100
+      ],
+      "chunks": 1,
+      "rounds": 1,
+      "seed": 2026,
+      "threads": 1,
+      "hot_rounds": 1,
+      "order": "blocked"
+    }
+  },
+  "reduced_config": "/home/hollow/repo/CFG_bench/tests/data/configs/all.csv",
+  "files": {
+    "/home/hollow/repo/CFG_bench/configs/for_test.csv": {
+      "sha256": "7051e195f9f92a8cfd91ff6e451a92c9e46941a40ea0c3001cba543cac6fa037",
+      "bytes": 105
+    },
+    "/home/hollow/repo/CFG_bench/data/grammars/c_alias.cnf": {
+      "sha256": "a3429eeda7bd44a044b7d4888f9753747b749092ca9fbfd078e0e6eecc3541fb",
+      "bytes": 102
+    },
+    "/home/hollow/repo/CFG_bench/data/grammars/c_alias.rsm": {
+      "sha256": "172fc0e1e93d5279647e95c63332f9ebf7aca2ab3a41e079c7da06114ba326eb",
+      "bytes": 197
+    },
+    "/home/hollow/repo/CFG_bench/data/grammars/java_points_to.cnf": {
+      "sha256": "179f94c638f4f5945e33f15224d6bae8ac0c1acb03b633939d55c6983b75809a",
+      "bytes": 366
+    },
+    "/home/hollow/repo/CFG_bench/data/grammars/java_points_to.rsm": {
+      "sha256": "130e307a3cb812c85874b78d4f6476223da67ace600706f027d07ea914d40454",
+      "bytes": 328
+    },
+    "/home/hollow/repo/CFG_bench/data/grammars/nested_parentheses_subClassOf_type.cnf": {
+      "sha256": "17631e74dcdf0a15a66570966ba9c845108b312be22332467719f9086c1f7541",
+      "bytes": 106
+    },
+    "/home/hollow/repo/CFG_bench/data/grammars/nested_parentheses_subClassOf_type.rsm": {
+      "sha256": "fc1ea5d6115a3e93701a43e830c9de2dd65d91e99cc83e496351b3c6746d3f32",
+      "bytes": 163
+    },
+    "/home/hollow/repo/CFG_bench/data/graphs/c_alias/block.g": {
+      "sha256": "1f2c14bf9ad097f9607328088072e0a93cea9d6ca91505ad19bae233198180f3",
+      "bytes": 107367376
+    },
+    "/home/hollow/repo/CFG_bench/data/graphs/c_alias/init.g": {
+      "sha256": "45febead7beca3afa2d0fbd8693b4c4a6da6c41760766038db03e55b8fc90bc5",
+      "bytes": 75609822
+    },
+    "/home/hollow/repo/CFG_bench/data/graphs/c_alias/mm.g": {
+      "sha256": "28f2a04950b099c0f7249adf19638d660c2db8a31750f3f14bf614f1a8fabfa7",
+      "bytes": 78572016
+    },
+    "/home/hollow/repo/CFG_bench/data/graphs/c_alias_analysis/wc.g": {
+      "sha256": "cac6a2b62b1b9ce54e56435a6ac47061e5b2d057ab35b4551db69712e967f2f5",
+      "bytes": 5398
+    },
+    "/home/hollow/repo/CFG_bench/data/graphs/java/avrora.g": {
+      "sha256": "8d214230dc1c8994d44565711bd6871f1216ba2c86c122dedae63c4c2e1d9eff",
+      "bytes": 997106
+    },
+    "/home/hollow/repo/CFG_bench/data/graphs/java/batik.g": {
+      "sha256": "ce48f526be95619a21178d2ab6d119dd62a82a2b8a3ce2ca3b4e589240f1a391",
+      "bytes": 2533318
+    },
+    "/home/hollow/repo/CFG_bench/data/graphs/rdf/eclass.g": {
+      "sha256": "84adc03c1928266c417b8bacc5e7d23ab604923e0907ccd0f5286b3cac60e64f",
+      "bytes": 14735728
+    },
+    "/home/hollow/repo/CFG_bench/data/graphs/rdf/go.g": {
+      "sha256": "cf1990b3859b31c7f374d501c6303fc5723a5351f2e374a78d33d2b956ac5a7b",
+      "bytes": 70915500
+    },
+    "/home/hollow/repo/CFG_bench/data/graphs/rdf/go_hierarchy.g": {
+      "sha256": "33100623553d2397cb8a1e7e47e91a813995eebdadcd96b2c20df613ae87c516",
+      "bytes": 21369304
+    },
+    "/home/hollow/repo/CFG_bench/data/start_nodes/c_alias_wc_start.result": {
+      "sha256": "2f57026b7381de132423de43d0b712b9db6f0ff5f375284a56c9ed55455b2c8f",
+      "bytes": 559
+    },
+    "/home/hollow/repo/CFG_bench/results/experiment_2026-10-26_20-59-13/candidates/c_alias_block_start.result": {
+      "sha256": "c3f9d0a8599d800fdf5ecb6a92a369efac15662ce6633acee25756ed2878453a",
+      "bytes": 17398757
+    },
+    "/home/hollow/repo/CFG_bench/results/experiment_2026-10-26_20-59-13/candidates/c_alias_init_start.result": {
+      "sha256": "cef29aa0a1df3d7c2038c81ee853f644a109a684533cceea2deacd19be4dd380",
+      "bytes": 12198584
+    },
+    "/home/hollow/repo/CFG_bench/results/experiment_2026-10-26_20-59-13/candidates/c_alias_mm_start.result": {
+      "sha256": "4e3a0802e1f890b7c32af13e614c99c921330c32895648dfd91c1b07e5fc8408",
+      "bytes": 12687906
+    },
+    "/home/hollow/repo/CFG_bench/results/experiment_2026-10-26_20-59-13/candidates/java_points_to_avrora_start.result": {
+      "sha256": "4a685122eb27e7ac6026ae643f54b5f13fd8ca4f2d99888c7c5240fbfe87c97a",
+      "bytes": 48167
+    },
+    "/home/hollow/repo/CFG_bench/results/experiment_2026-10-26_20-59-13/candidates/java_points_to_batik_start.result": {
+      "sha256": "fadc7fbd4ac3b5f34e7ffa4d4616e6b77ca4cac267e3efbebcf1b366eaf445d7",
+      "bytes": 110182
+    },
+    "/home/hollow/repo/CFG_bench/results/experiment_2026-10-26_20-59-13/candidates/nested_parentheses_subClassOf_type_eclass_start.result": {
+      "sha256": "4e7e3af0d817ebda4302f1c09d89755d5ac2a7ebe48122f9226e4a8737facf6a",
+      "bytes": 183133
+    },
+    "/home/hollow/repo/CFG_bench/results/experiment_2026-10-26_20-59-13/candidates/nested_parentheses_subClassOf_type_go_hierarchy_start.result": {
+      "sha256": "bd0351bd4e31d74eb59614392c3776669956aa49f180fe1c8a335bc4c7a37b4b",
+      "bytes": 44124
+    },
+    "/home/hollow/repo/CFG_bench/results/experiment_2026-10-26_20-59-13/candidates/nested_parentheses_subClassOf_type_go_start.result": {
+      "sha256": "81b36ace80b29b7080ef207ffbab37249911b750ebfbe1382e446c6d3362790c",
+      "bytes": 240832
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/configs/all.csv": {
+      "sha256": "b1298377dee83b3ad96f1b601b5296747c8a4f66310a030e595bb89397737f65",
+      "bytes": 2628
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/c_alias_analysis/block/c_alias.cnf": {
+      "sha256": "e37c8e25450decff4c4326ed56f9bc7b573b02b8a56a69fc74fd4ae12e2b4fd8",
+      "bytes": 93
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/c_alias_analysis/block/c_alias.rsm": {
+      "sha256": "172fc0e1e93d5279647e95c63332f9ebf7aca2ab3a41e079c7da06114ba326eb",
+      "bytes": 197
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/c_alias_analysis/init/c_alias.cnf": {
+      "sha256": "e37c8e25450decff4c4326ed56f9bc7b573b02b8a56a69fc74fd4ae12e2b4fd8",
+      "bytes": 93
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/c_alias_analysis/init/c_alias.rsm": {
+      "sha256": "172fc0e1e93d5279647e95c63332f9ebf7aca2ab3a41e079c7da06114ba326eb",
+      "bytes": 197
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/c_alias_analysis/mm/c_alias.cnf": {
+      "sha256": "e37c8e25450decff4c4326ed56f9bc7b573b02b8a56a69fc74fd4ae12e2b4fd8",
+      "bytes": 93
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/c_alias_analysis/mm/c_alias.rsm": {
+      "sha256": "172fc0e1e93d5279647e95c63332f9ebf7aca2ab3a41e079c7da06114ba326eb",
+      "bytes": 197
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/context_sensitive_data_flow/leela/aa.cnf": {
+      "sha256": "e7c349a0723874c60e7dc22aad8f83c89eeef1c3c812c775b6abe984d6909483",
+      "bytes": 51
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/context_sensitive_data_flow/leela/aa.rsm": {
+      "sha256": "dd5fa765086d0c287e92ab944635bf74908d4c9d34d6c6a03f63ab85dc369071",
+      "bytes": 96
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/context_sensitive_data_flow/nab/aa.cnf": {
+      "sha256": "e7c349a0723874c60e7dc22aad8f83c89eeef1c3c812c775b6abe984d6909483",
+      "bytes": 51
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/context_sensitive_data_flow/nab/aa.rsm": {
+      "sha256": "dd5fa765086d0c287e92ab944635bf74908d4c9d34d6c6a03f63ab85dc369071",
+      "bytes": 96
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/context_sensitive_data_flow/xz/aa.cnf": {
+      "sha256": "e7c349a0723874c60e7dc22aad8f83c89eeef1c3c812c775b6abe984d6909483",
+      "bytes": 51
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/context_sensitive_data_flow/xz/aa.rsm": {
+      "sha256": "dd5fa765086d0c287e92ab944635bf74908d4c9d34d6c6a03f63ab85dc369071",
+      "bytes": 96
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/field_sensitive_alias/leela_field_sensitive_alias/vf.cnf": {
+      "sha256": "497eb06835640445b5a8ede5ba4272472f916012568e367bd40d1ee821e574e0",
+      "bytes": 104
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/field_sensitive_alias/leela_field_sensitive_alias/vf.rsm": {
+      "sha256": "a7ec96753088cc5fd944d75c5e26744bc76f8cc6f0aaa6e439a7fc030c26c8a0",
+      "bytes": 236
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/field_sensitive_alias/nab_field_sensitive_alias/vf.cnf": {
+      "sha256": "497eb06835640445b5a8ede5ba4272472f916012568e367bd40d1ee821e574e0",
+      "bytes": 104
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/field_sensitive_alias/nab_field_sensitive_alias/vf.rsm": {
+      "sha256": "a7ec96753088cc5fd944d75c5e26744bc76f8cc6f0aaa6e439a7fc030c26c8a0",
+      "bytes": 236
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/field_sensitive_alias/xz_field_sensitive_alias/vf.cnf": {
+      "sha256": "497eb06835640445b5a8ede5ba4272472f916012568e367bd40d1ee821e574e0",
+      "bytes": 104
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/field_sensitive_alias/xz_field_sensitive_alias/vf.rsm": {
+      "sha256": "a7ec96753088cc5fd944d75c5e26744bc76f8cc6f0aaa6e439a7fc030c26c8a0",
+      "bytes": 236
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/java_points_to/eclipse/java_points_to.cnf": {
+      "sha256": "179f94c638f4f5945e33f15224d6bae8ac0c1acb03b633939d55c6983b75809a",
+      "bytes": 366
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/java_points_to/eclipse/java_points_to.rsm": {
+      "sha256": "130e307a3cb812c85874b78d4f6476223da67ace600706f027d07ea914d40454",
+      "bytes": 328
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/java_points_to/gson/java_points_to.cnf": {
+      "sha256": "179f94c638f4f5945e33f15224d6bae8ac0c1acb03b633939d55c6983b75809a",
+      "bytes": 366
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/java_points_to/gson/java_points_to.rsm": {
+      "sha256": "130e307a3cb812c85874b78d4f6476223da67ace600706f027d07ea914d40454",
+      "bytes": 328
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/java_points_to/lusearch/java_points_to.cnf": {
+      "sha256": "179f94c638f4f5945e33f15224d6bae8ac0c1acb03b633939d55c6983b75809a",
+      "bytes": 366
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/java_points_to/lusearch/java_points_to.rsm": {
+      "sha256": "130e307a3cb812c85874b78d4f6476223da67ace600706f027d07ea914d40454",
+      "bytes": 328
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/rdf/eclass/nested_parentheses_subClassOf_type.cnf": {
+      "sha256": "ab19f87a4d750bf7e070c0d585eac383a03c5f31519d6913258d7849a1370c8e",
+      "bytes": 106
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/rdf/eclass/nested_parentheses_subClassOf_type.rsm": {
+      "sha256": "fc1ea5d6115a3e93701a43e830c9de2dd65d91e99cc83e496351b3c6746d3f32",
+      "bytes": 163
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/rdf/go/nested_parentheses_subClassOf_type.cnf": {
+      "sha256": "ab19f87a4d750bf7e070c0d585eac383a03c5f31519d6913258d7849a1370c8e",
+      "bytes": 106
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/rdf/go/nested_parentheses_subClassOf_type.rsm": {
+      "sha256": "fc1ea5d6115a3e93701a43e830c9de2dd65d91e99cc83e496351b3c6746d3f32",
+      "bytes": 163
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/rdf/taxonomy/nested_parentheses_subClassOf_type.cnf": {
+      "sha256": "ab19f87a4d750bf7e070c0d585eac383a03c5f31519d6913258d7849a1370c8e",
+      "bytes": 106
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/grammars/rdf/taxonomy/nested_parentheses_subClassOf_type.rsm": {
+      "sha256": "fc1ea5d6115a3e93701a43e830c9de2dd65d91e99cc83e496351b3c6746d3f32",
+      "bytes": 163
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/graphs/c_alias_analysis/block.g": {
+      "sha256": "9fa3a45f23b3eea1751befc5afc8a193ef620994d7a8402ca57bb0948f6cc305",
+      "bytes": 915896
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/graphs/c_alias_analysis/init.g": {
+      "sha256": "ce74317ef21230eab0b8a4e7110484db3df486ba9241d60583f522901eaac361",
+      "bytes": 916186
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/graphs/c_alias_analysis/mm.g": {
+      "sha256": "413756dfcfd84e5f37d1f985db56313ed19c8c7de0933023bfc0715e033571a7",
+      "bytes": 915720
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/graphs/context_sensitive_data_flow/leela.g": {
+      "sha256": "ceaf015470a513380b226532788b84ca9b9789bef4b8d02bb638b0b49b8b157c",
+      "bytes": 116592
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/graphs/context_sensitive_data_flow/nab.g": {
+      "sha256": "ac30cbb51a9d38da85752f8a23f6cec6b28c9b8f8dd3c9c0f6db7750f7d6b198",
+      "bytes": 95732
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/graphs/context_sensitive_data_flow/xz.g": {
+      "sha256": "8eaebb5f25bbf90722671fbfb585a59a0def7ccfb2815f2edc0608e13b44ce44",
+      "bytes": 110214
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/graphs/field_sensitive_alias/leela_field_sensitive_alias.g": {
+      "sha256": "2ec289f0bc9c846041333b36e3bfdeb7b7a506236dcffdf251659b9e2a43bc50",
+      "bytes": 51340
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/graphs/field_sensitive_alias/nab_field_sensitive_alias.g": {
+      "sha256": "0e45e3719ad01d8167314dc237821c67db93a054de808d324e7f1b053ea4f3b0",
+      "bytes": 52238
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/graphs/field_sensitive_alias/xz_field_sensitive_alias.g": {
+      "sha256": "0a92c08ca2d737dd65250ffb36c6f6d85b91f91868dfeb504611ab761091c934",
+      "bytes": 88074
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/graphs/java_points_to/eclipse.g": {
+      "sha256": "0244fbbdba582c67e4575a562eb5f492f7b1882914b7fe0911a2472726305d55",
+      "bytes": 66894
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/graphs/java_points_to/gson.g": {
+      "sha256": "262cbd8cb305295e6a8f3d523df695104e5c59e9e3d176266e20280acceeec0f",
+      "bytes": 66198
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/graphs/java_points_to/lusearch.g": {
+      "sha256": "83eda1a8b1b08ecc27b18b302b0e665d2b5a5db5a7f8a508ec7d3345d0901310",
+      "bytes": 69120
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/graphs/rdf/eclass.g": {
+      "sha256": "91a1d2e97b590ab020576bf1941df61855289ec841b7f7721b436f0a8ade085a",
+      "bytes": 1149430
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/graphs/rdf/go.g": {
+      "sha256": "7689136498e31b5ee76f30b9d22d45d894cf6fed8d3d5ec4cf55c58e362e6faf",
+      "bytes": 1199380
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/graphs/rdf/taxonomy.g": {
+      "sha256": "69829dcf50b3857baf04b0e4d38957750710e291f7a4e3807b16e389a355e900",
+      "bytes": 1146564
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/start_nodes/aa_leela_start.result": {
+      "sha256": "a6dbe0b983d0970137b31447fcc533493411c73009aad4ef109d33e499fa3f23",
+      "bytes": 10995
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/start_nodes/aa_nab_start.result": {
+      "sha256": "59c6f7d48de30edb0b5b767127caa73e871cc5c42652d10a0999af0774262979",
+      "bytes": 8685
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/start_nodes/aa_xz_start.result": {
+      "sha256": "57f4c130168c1473795ab1092bdbfe7bb86575b90b1bbba05fa9f283f07010cd",
+      "bytes": 11930
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/start_nodes/c_alias_block_start.result": {
+      "sha256": "f89ec642f025e0bd2d806f7c351138c4949fb175dd5727ce1d783d8284313d0f",
+      "bytes": 121813
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/start_nodes/c_alias_init_start.result": {
+      "sha256": "a3abbc5fa7e7bb022d53e43aef377cb8539df27f300b93301bf3a1287aa24a36",
+      "bytes": 121871
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/start_nodes/c_alias_mm_start.result": {
+      "sha256": "7bfc6a5f48b7b7d4fff147dfcc50094e3591ef9d78c9d26f24a333137fae9337",
+      "bytes": 121390
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/start_nodes/java_points_to_eclipse_start.result": {
+      "sha256": "5df0b6c099fcb0367484da2d3f3f2753f7be6f37d276ed8d9a75c76f427d9e19",
+      "bytes": 1312
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/start_nodes/java_points_to_gson_start.result": {
+      "sha256": "9867528ab430d699d4a89973dc65d5fba4d0637b309ae3522defe2e89942d389",
+      "bytes": 1091
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/start_nodes/java_points_to_lusearch_start.result": {
+      "sha256": "1ef2ae0a222fea3c19a60ba93e17d3247ac60b40425657de65e82d68f70ffccb",
+      "bytes": 1131
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/start_nodes/nested_parentheses_subClassOf_type_eclass_start.result": {
+      "sha256": "270c1fea9f8523de0243620f87c99140839272818966260f39f45036506da41f",
+      "bytes": 34836
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/start_nodes/nested_parentheses_subClassOf_type_go_start.result": {
+      "sha256": "56717db5ce1c41c4114b009b409e137dcbdf155021ed5ad9c06011bac7599a14",
+      "bytes": 40831
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/start_nodes/nested_parentheses_subClassOf_type_taxonomy_start.result": {
+      "sha256": "a92567619a57d0f5b5a428dab2e140f1da93e3adcb565c01c0fae7bf231702d7",
+      "bytes": 33460
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/start_nodes/vf_leela_field_sensitive_alias_start.result": {
+      "sha256": "565f1a4a9cf7e7f391d773c6ac3277623f9fe9b73525604b52146bf891979b70",
+      "bytes": 6370
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/start_nodes/vf_nab_field_sensitive_alias_start.result": {
+      "sha256": "32f1d700070621595f1111398e18f00adc8fe6d3e2c8f21c6143f254bf31adc5",
+      "bytes": 7355
+    },
+    "/home/hollow/repo/CFG_bench/tests/data/start_nodes/vf_xz_field_sensitive_alias_start.result": {
+      "sha256": "888980a72198ade097b7eefae05b987faf266c7e12d8f84ac0134d2d8901b2fd",
+      "bytes": 12930
+    },
+    "/home/hollow/repo/GraphBLAS/build/libgraphblas.so.10.5.2": {
+      "sha256": "90e963632e338108ba13785d8223910c7d3f043fbd9219857e61e5cc8f1ab1ce",
+      "bytes": 137513136
+    },
+    "/home/hollow/repo/LAGraph/build/src/liblagraph.so.1.2.1": {
+      "sha256": "36c71a8cbd02fc78236d629cb6e63f94a87c6c9442c368c504f6dc3871a0b579",
+      "bytes": 994776
+    },
+    "/home/hollow/repo/LAGraph/build-exp-release/experimental/liblagraphx.so.1.2.2": {
+      "sha256": "b631769be57435e9fe0eee4d097625c1c64b4f4910602fcc8d2374145c017bda",
+      "bytes": 1007248
+    },
+    "/home/hollow/repo/LAGraph/experimental/algorithm/cfpq_rsm_lab/configs/lab_batik.csv": {
+      "sha256": "bf7795b1ed0c0cca0491672dccfa8c4b09cb6630e98370b864f991155d9c677a",
+      "bytes": 1248
+    },
+    "/home/hollow/repo/LAGraph/experimental/algorithm/cfpq_rsm_lab/tooling/bin/cfg_bench__18b417d1ea39": {
+      "sha256": "18b417d1ea3909404480af9db29a173e943d67c9efdfe553fd1f152b5c8a961b",
+      "bytes": 116984
+    },
+    "/home/hollow/repo/LAGraph/include/LAGraph.h": {
+      "sha256": "09b55fb3245ea231bd491e2e5751e88316b13b7ecf72becbb201d422a28ed357",
+      "bytes": 106922
+    },
+    "/home/hollow/repo/LAGraph/include/LAGraphX.h": {
+      "sha256": "a5ad9ea6cf8216871685662463e02920e581d5aa5090fd801ca5c1497e925abf",
+      "bytes": 97790
+    },
+    "/home/hollow/repo/LAGraph/src/utility/LG_internal.h": {
+      "sha256": "a0967fddeefc281b57f1dc0c05f7633812303cbd996d047a39d5ad12dab5687f",
+      "bytes": 27468
+    },
+    "/usr/lib/ld-linux-x86-64.so.2": {
+      "sha256": "f5e11cc62f8f2c24dff532982559f4303dba3b17e7450551372a88c8e7ea8757",
+      "bytes": 263152
+    },
+    "/usr/lib/libc.so.6": {
+      "sha256": "02c8c3d06180beee9c7d0392aa85736c7d19f274a81e7f8f0b3d9e28e0641524",
+      "bytes": 2215072
+    },
+    "/usr/lib/libgomp.so.1.0.0": {
+      "sha256": "d6c6309ee83dbe9b50bf38342489799a4822ee22451677730ff5542aa74bdefc",
+      "bytes": 363560
+    },
+    "/usr/lib/libm.so.6": {
+      "sha256": "965106704753eefe8c31ae7da6daba3ead3d18c52b19b5fcc41178bcc4aa999d",
+      "bytes": 1268336
+    },
+    "/usr/local/include/suitesparse/GraphBLAS.h": {
+      "sha256": "e75daa5dff352f983d063d50c3829accfe82cf7701e3758d8b748a87c6c7bc04",
+      "bytes": 442121
+    }
+  }
+}

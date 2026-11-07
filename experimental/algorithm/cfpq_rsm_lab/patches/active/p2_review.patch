@@ -1,0 +1,642 @@
+--- a/experimental/algorithm/LAGraph_CFPQ_RSM.c
++++ b/experimental/algorithm/LAGraph_CFPQ_RSM.c
+@@ -27,6 +27,7 @@
+         GrB_free(&M_new);                                                                          \
+         GrB_free(&scratch);                                                                        \
+         GrB_free(&s_temp);                                                                         \
++        s_compact_free(&compact);                                                                 \
+         GrB_free(&rowvec);                                                                         \
+         LAGraph_Free((void **)&term_active, NULL);                                                 \
+         FREE_MATRIX_ARRAY(term_src, num_term);                                                     \
+@@ -121,6 +122,582 @@
+     return GrB_SUCCESS;
+ }
+ 
++#define S_NO_STATE ((GrB_Index)-1)
++// reusable tuple arrays (both GrB_Index and Boolean value arrays)
++typedef struct
++{
++    GrB_Index *i;
++    GrB_Index *j;
++    bool *x;
++    GrB_Index cap;
++} S_TupleBuf;
++
++static void s_tuples_free(S_TupleBuf *b)
++{
++    LAGraph_Free((void **)&b->i, NULL);
++    LAGraph_Free((void **)&b->j, NULL);
++    LAGraph_Free((void **)&b->x, NULL);
++    b->cap = 0;
++}
++
++static GrB_Info s_tuples_reserve(S_TupleBuf *b, GrB_Index need, char *msg)
++{
++    if (need <= b->cap)
++        return GrB_SUCCESS;
++    if (need > SIZE_MAX / sizeof(GrB_Index))
++        return GrB_OUT_OF_MEMORY;
++
++    GrB_Index cap = (b->cap == 0) ? 64 : b->cap;
++    while (cap < need)
++    {
++        if (cap > (GrB_Index)(SIZE_MAX / (8 * sizeof(GrB_Index))))
++        {
++            cap = need;
++            break;
++        }
++        cap *= 2;
++    }
++
++    int st;
++    st = LAGraph_Realloc((void **)&b->i, (size_t)cap, (size_t)b->cap, sizeof(GrB_Index), msg);
++    if (st < 0)
++        return (GrB_Info)st;
++    st = LAGraph_Realloc((void **)&b->j, (size_t)cap, (size_t)b->cap, sizeof(GrB_Index), msg);
++    if (st < 0)
++        return (GrB_Info)st;
++    st = LAGraph_Realloc((void **)&b->x, (size_t)cap, (size_t)b->cap, sizeof(bool), msg);
++    if (st < 0)
++        return (GrB_Info)st;
++
++    b->cap = cap;
++    return GrB_SUCCESS;
++}
++
++// allocation helpers for the setup helper, which has its own cleanup label
++#define S_ALLOC(ptr, nitems, size)                                                                 \
++    {                                                                                              \
++        int _sst = LAGraph_Malloc((void **)&(ptr), (size_t)(nitems), (size_t)(size), NULL);        \
++        if (_sst < 0)                                                                              \
++        {                                                                                          \
++            info = (GrB_Info)_sst;                                                                 \
++            goto cleanup;                                                                          \
++        }                                                                                          \
++    }
++#define S_CALLOC(ptr, nitems, size)                                                                \
++    {                                                                                              \
++        int _sst = LAGraph_Calloc((void **)&(ptr), (size_t)(nitems), (size_t)(size), NULL);        \
++        if (_sst < 0)                                                                              \
++        {                                                                                          \
++            info = (GrB_Info)_sst;                                                                 \
++            goto cleanup;                                                                          \
++        }                                                                                          \
++    }
++#define S_FREE(ptr) LAGraph_Free((void **)&(ptr), NULL)
++
++#define S_TRY(expr)                                                                                \
++    {                                                                                              \
++        GrB_Info _stry = (expr);                                                                   \
++        if (_stry != GrB_SUCCESS)                                                                  \
++        {                                                                                          \
++            info = _stry;                                                                          \
++            goto cleanup;                                                                          \
++        }                                                                                          \
++    }
++
++typedef struct
++{
++    bool changed;            // false when the caller's representation is already compact
++    GrB_Index orig_Q;         // original state count
++    GrB_Index state_count;    // compact Q'
++    GrB_Index orig_term;      // original terminal count
++    GrB_Index term_count;     // compact terminal count
++    GrB_Index nonterm_count;  // unchanged
++    GrB_Index *new_of_old;    // [orig_Q], S_NO_STATE when removed
++    GrB_Index *old_of_new;    // [state_count]
++    GrB_Index *term_of_orig;  // [orig_term], S_NO_STATE when dropped
++    GrB_Index *orig_of_term;  // [term_count]
++    GrB_Matrix *term;         // [term_count] owned Q' x Q'
++    GrB_Matrix *graph;        // [term_count] borrowed caller graph matrices
++    GrB_Matrix *nonterm;      // [nonterm_count] owned Q' x Q' or NULL
++    GrB_Index *start_states;  // [nonterm_count]
++    GrB_Vector *finals;       // [nonterm_count] owned length Q' or NULL
++} S_Compact;
++
++static void s_compact_free(S_Compact *cp)
++{
++    if (cp->term != NULL)
++    {
++        for (GrB_Index j = 0; j < cp->term_count; ++j)
++            GrB_free(&cp->term[j]);
++        LAGraph_Free((void **)&cp->term, NULL);
++    }
++    LAGraph_Free((void **)&cp->graph, NULL); // matrices themselves are borrowed
++    if (cp->nonterm != NULL)
++    {
++        for (GrB_Index i = 0; i < cp->nonterm_count; ++i)
++            GrB_free(&cp->nonterm[i]);
++        LAGraph_Free((void **)&cp->nonterm, NULL);
++    }
++    if (cp->finals != NULL)
++    {
++        for (GrB_Index i = 0; i < cp->nonterm_count; ++i)
++            GrB_free(&cp->finals[i]);
++        LAGraph_Free((void **)&cp->finals, NULL);
++    }
++    LAGraph_Free((void **)&cp->new_of_old, NULL);
++    LAGraph_Free((void **)&cp->old_of_new, NULL);
++    LAGraph_Free((void **)&cp->term_of_orig, NULL);
++    LAGraph_Free((void **)&cp->orig_of_term, NULL);
++    LAGraph_Free((void **)&cp->start_states, NULL);
++    memset(cp, 0, sizeof(*cp));
++}
++
++static GrB_Info s_compact_build(S_Compact *cp, GrB_Index Q, GrB_Index V, GrB_Index orig_term,
++                                GrB_Index orig_nonterm, GrB_Matrix *rsm_term,
++                                const GrB_Matrix *graph_term, GrB_Matrix *rsm_nonterm,
++                                const GrB_Index *start_states, GrB_Vector *final_states,
++                                GrB_Index start_nonterm, bool *start_removed, char *msg)
++{
++    (void)V;
++    GrB_Info info = GrB_SUCCESS;
++    bool *term_ok = NULL;
++    GrB_Index *efrom = NULL;
++    GrB_Index *eto = NULL;
++    GrB_Index *term_off = NULL; // terminal slices of the already extracted control edges
++    GrB_Index *foff = NULL;
++    GrB_Index *roff = NULL;
++    GrB_Index *fadj = NULL;
++    GrB_Index *radj = NULL;
++    GrB_Index *cur = NULL;
++    bool *fseen = NULL;
++    bool *rseen = NULL;
++    bool *keep = NULL;
++    GrB_Index *queue = NULL;
++    GrB_Index *new_of_old = NULL;
++    GrB_Index *old_of_new = NULL;
++    S_TupleBuf ttup;
++    S_TupleBuf ftup;
++    memset(&ttup, 0, sizeof(ttup));
++    memset(&ftup, 0, sizeof(ftup));
++
++    *start_removed = false;
++
++    S_CALLOC(term_ok, orig_term, sizeof(bool));
++
++    // count control edges: active terminal transitions plus every nonterminal
++    // transition (conservative call treatment)
++    GrB_Index E = 0;
++    for (GrB_Index t = 0; t < orig_term; ++t)
++    {
++        if (rsm_term[t] == GrB_NULL || graph_term[t] == GrB_NULL)
++            continue;
++        GrB_Index rn = 0, gn = 0;
++        info = GrB_Matrix_nvals(&rn, rsm_term[t]);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        info = GrB_Matrix_nvals(&gn, graph_term[t]);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        if (rn == 0 || gn == 0)
++            continue;
++        term_ok[t] = true;
++        if (rn > CFPQ_MAX_DIM - E)
++        {
++            info = GrB_OUT_OF_MEMORY;
++            goto cleanup;
++        }
++        E += rn;
++    }
++    for (GrB_Index i = 0; i < orig_nonterm; ++i)
++    {
++        if (rsm_nonterm[i] == GrB_NULL)
++            continue;
++        GrB_Index rn = 0;
++        info = GrB_Matrix_nvals(&rn, rsm_nonterm[i]);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        if (rn > CFPQ_MAX_DIM - E)
++        {
++            info = GrB_OUT_OF_MEMORY;
++            goto cleanup;
++        }
++        E += rn;
++    }
++
++    S_ALLOC(efrom, E, sizeof(GrB_Index));
++    S_ALLOC(eto, E, sizeof(GrB_Index));
++    S_ALLOC(term_off, orig_term + 1, sizeof(GrB_Index));
++
++    GrB_Index e = 0;
++    for (GrB_Index t = 0; t < orig_term; ++t)
++    {
++        term_off[t] = e;
++        if (!term_ok[t])
++            continue;
++        GrB_Index rn = 0;
++        info = GrB_Matrix_nvals(&rn, rsm_term[t]);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        info = s_tuples_reserve(&ttup, rn, msg);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        GrB_Index n = rn;
++        info = GrB_Matrix_extractTuples_BOOL(ttup.i, ttup.j, ttup.x, &n, rsm_term[t]);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        for (GrB_Index k = 0; k < n; ++k)
++        {
++            efrom[e] = ttup.i[k];
++            eto[e] = ttup.j[k];
++            e++;
++        }
++    }
++    term_off[orig_term] = e;
++    for (GrB_Index i = 0; i < orig_nonterm; ++i)
++    {
++        if (rsm_nonterm[i] == GrB_NULL)
++            continue;
++        GrB_Index rn = 0;
++        info = GrB_Matrix_nvals(&rn, rsm_nonterm[i]);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        if (rn == 0)
++            continue;
++        info = s_tuples_reserve(&ttup, rn, msg);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        GrB_Index n = rn;
++        info = GrB_Matrix_extractTuples_BOOL(ttup.i, ttup.j, ttup.x, &n, rsm_nonterm[i]);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        for (GrB_Index k = 0; k < n; ++k)
++        {
++            efrom[e] = ttup.i[k];
++            eto[e] = ttup.j[k];
++            e++;
++        }
++    }
++
++    // forward / reverse CSR of the control graph
++    S_CALLOC(foff, (size_t)Q + 1, sizeof(GrB_Index));
++    S_CALLOC(roff, (size_t)Q + 1, sizeof(GrB_Index));
++    for (GrB_Index k = 0; k < e; ++k)
++    {
++        foff[efrom[k] + 1]++;
++        roff[eto[k] + 1]++;
++    }
++    for (GrB_Index q = 0; q < Q; ++q)
++    {
++        foff[q + 1] += foff[q];
++        roff[q + 1] += roff[q];
++    }
++    S_ALLOC(fadj, e, sizeof(GrB_Index));
++    S_ALLOC(radj, e, sizeof(GrB_Index));
++    S_ALLOC(cur, (size_t)Q + 1, sizeof(GrB_Index));
++    memcpy(cur, foff, ((size_t)Q + 1) * sizeof(GrB_Index));
++    for (GrB_Index k = 0; k < e; ++k)
++        fadj[cur[efrom[k]]++] = eto[k];
++    memcpy(cur, roff, ((size_t)Q + 1) * sizeof(GrB_Index));
++    for (GrB_Index k = 0; k < e; ++k)
++        radj[cur[eto[k]]++] = efrom[k];
++
++    S_CALLOC(fseen, Q, sizeof(bool));
++    S_CALLOC(rseen, Q, sizeof(bool));
++    S_CALLOC(keep, Q, sizeof(bool));
++    S_ALLOC(queue, Q, sizeof(GrB_Index));
++
++    // forward seeds: the start box and every conservatively callable box start
++    GrB_Index head = 0, tail = 0;
++    {
++        GrB_Index ss = start_states[start_nonterm];
++        if (ss < Q && !fseen[ss])
++        {
++            fseen[ss] = true;
++            queue[tail++] = ss;
++        }
++    }
++    for (GrB_Index i = 0; i < orig_nonterm; ++i)
++    {
++        if (rsm_nonterm[i] == GrB_NULL)
++            continue;
++        GrB_Index ss = start_states[i];
++        if (ss < Q && !fseen[ss])
++        {
++            fseen[ss] = true;
++            queue[tail++] = ss;
++        }
++    }
++    while (head < tail)
++    {
++        GrB_Index q = queue[head++];
++        for (GrB_Index p = foff[q]; p < foff[q + 1]; ++p)
++        {
++            GrB_Index v = fadj[p];
++            if (!fseen[v])
++            {
++                fseen[v] = true;
++                queue[tail++] = v;
++            }
++        }
++    }
++
++    // reverse seeds: every stored entry of every final vector
++    head = 0;
++    tail = 0;
++    for (GrB_Index i = 0; i < orig_nonterm; ++i)
++    {
++        if (final_states[i] == GrB_NULL)
++            continue;
++        GrB_Index fn = 0;
++        info = GrB_Vector_nvals(&fn, final_states[i]);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        if (fn == 0)
++            continue;
++        info = s_tuples_reserve(&ftup, fn, msg);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        GrB_Index n = fn;
++        info = GrB_Vector_extractTuples_BOOL(ftup.i, ftup.x, &n, final_states[i]);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        for (GrB_Index k = 0; k < n; ++k)
++        {
++            GrB_Index v = ftup.i[k];
++            if (v < Q && !rseen[v])
++            {
++                rseen[v] = true;
++                queue[tail++] = v;
++            }
++        }
++    }
++    while (head < tail)
++    {
++        GrB_Index q = queue[head++];
++        for (GrB_Index p = roff[q]; p < roff[q + 1]; ++p)
++        {
++            GrB_Index v = radj[p];
++            if (!rseen[v])
++            {
++                rseen[v] = true;
++                queue[tail++] = v;
++            }
++        }
++    }
++
++    GrB_Index kept = 0;
++    for (GrB_Index q = 0; q < Q; ++q)
++    {
++        keep[q] = fseen[q] && rseen[q];
++        if (keep[q])
++            kept++;
++    }
++    if (kept == 0 || start_states[start_nonterm] >= Q ||
++        !keep[start_states[start_nonterm]])
++    {
++        // no accepting path starts at the query's start box: the exact result
++        // is the empty length-V vector
++        *start_removed = true;
++        goto cleanup;
++    }
++
++    // Do not copy every matrix when neither states nor labels can be removed.
++    // Original validation has already run; all borrowed input handles stay owned
++    // by the caller, and the normal kernel can use them directly.
++    bool all_terms_live = true;
++    for (GrB_Index t = 0; t < orig_term; ++t)
++        all_terms_live = all_terms_live && term_ok[t];
++    cp->state_count = kept;
++    if (kept == Q && all_terms_live)
++        goto cleanup;
++    cp->changed = true;
++
++    S_ALLOC(new_of_old, Q, sizeof(GrB_Index));
++    S_ALLOC(old_of_new, kept, sizeof(GrB_Index));
++    for (GrB_Index q = 0; q < Q; ++q)
++        new_of_old[q] = S_NO_STATE;
++    GrB_Index nx = 0;
++    for (GrB_Index q = 0; q < Q; ++q)
++    {
++        if (!keep[q])
++            continue;
++        new_of_old[q] = nx;
++        old_of_new[nx] = q;
++        nx++;
++    }
++
++    cp->orig_Q = Q;
++    cp->state_count = kept;
++    cp->orig_term = orig_term;
++    cp->nonterm_count = orig_nonterm;
++    cp->new_of_old = new_of_old;
++    cp->old_of_new = old_of_new;
++    new_of_old = NULL;
++    old_of_new = NULL;
++
++    S_CALLOC(cp->term_of_orig, orig_term, sizeof(GrB_Index));
++    for (GrB_Index t = 0; t < orig_term; ++t)
++        cp->term_of_orig[t] = S_NO_STATE;
++
++    // Reuse each label's control-edge slice instead of extracting the same
++    // transition matrix again for counting and again for rebuilding.
++    GrB_Index nt = 0;
++    for (GrB_Index t = 0; t < orig_term; ++t)
++    {
++        for (GrB_Index k = term_off[t]; k < term_off[t + 1]; ++k)
++        {
++            if (keep[efrom[k]] && keep[eto[k]])
++            {
++                cp->term_of_orig[t] = nt++;
++                break;
++            }
++        }
++    }
++    cp->term_count = nt;
++
++    S_CALLOC(cp->term, nt, sizeof(GrB_Matrix));
++    S_CALLOC(cp->graph, nt, sizeof(GrB_Matrix));
++    S_ALLOC(cp->orig_of_term, nt, sizeof(GrB_Index));
++
++    for (GrB_Index t = 0; t < orig_term; ++t)
++    {
++        GrB_Index j = cp->term_of_orig[t];
++        if (j == S_NO_STATE)
++            continue;
++        S_TRY(s_tuples_reserve(&ttup, term_off[t + 1] - term_off[t], msg));
++        GrB_Index c = 0;
++        for (GrB_Index k = term_off[t]; k < term_off[t + 1]; ++k)
++        {
++            GrB_Index a = cp->new_of_old[efrom[k]];
++            GrB_Index b = cp->new_of_old[eto[k]];
++            if (a == S_NO_STATE || b == S_NO_STATE)
++                continue;
++            ttup.i[c] = a;
++            ttup.j[c] = b;
++            ttup.x[c] = true;
++            c++;
++        }
++        info = GrB_Matrix_new(&cp->term[j], GrB_BOOL, kept, kept);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        info = GrB_Matrix_build_BOOL(cp->term[j], ttup.i, ttup.j, ttup.x, c, GrB_LOR);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        cp->orig_of_term[j] = t;
++        cp->graph[j] = graph_term[t];
++    }
++
++    S_CALLOC(cp->nonterm, orig_nonterm, sizeof(GrB_Matrix));
++    S_ALLOC(cp->start_states, orig_nonterm, sizeof(GrB_Index));
++    S_CALLOC(cp->finals, orig_nonterm, sizeof(GrB_Vector));
++
++    for (GrB_Index i = 0; i < orig_nonterm; ++i)
++    {
++        GrB_Index ss = start_states[i];
++        cp->start_states[i] = (ss < Q) ? cp->new_of_old[ss] : S_NO_STATE;
++
++        if (rsm_nonterm[i] == GrB_NULL)
++            continue;
++        if (cp->start_states[i] == S_NO_STATE)
++        {
++            // empty-language box: its call sites cannot contribute and its
++            // start state is not representable in the compact domain
++            continue;
++        }
++        GrB_Index rn = 0;
++        info = GrB_Matrix_nvals(&rn, rsm_nonterm[i]);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        if (rn == 0)
++            continue;
++        info = s_tuples_reserve(&ttup, rn, msg);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        GrB_Index n = rn;
++        info = GrB_Matrix_extractTuples_BOOL(ttup.i, ttup.j, ttup.x, &n, rsm_nonterm[i]);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        GrB_Index c = 0;
++        for (GrB_Index k = 0; k < n; ++k)
++        {
++            GrB_Index a = cp->new_of_old[ttup.i[k]];
++            GrB_Index b = cp->new_of_old[ttup.j[k]];
++            if (a == S_NO_STATE || b == S_NO_STATE)
++                continue;
++            ttup.i[c] = a;
++            ttup.j[c] = b;
++            ttup.x[c] = true;
++            c++;
++        }
++        if (c == 0)
++            continue; // no surviving call sites: equivalent to no calls
++        info = GrB_Matrix_new(&cp->nonterm[i], GrB_BOOL, kept, kept);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        info = GrB_Matrix_build_BOOL(cp->nonterm[i], ttup.i, ttup.j, ttup.x, c, GrB_LOR);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++    }
++
++    for (GrB_Index i = 0; i < orig_nonterm; ++i)
++    {
++        if (final_states[i] == GrB_NULL)
++            continue;
++        GrB_Index fn = 0;
++        info = GrB_Vector_nvals(&fn, final_states[i]);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        if (fn == 0)
++            continue;
++        info = s_tuples_reserve(&ftup, fn, msg);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        GrB_Index n = fn;
++        info = GrB_Vector_extractTuples_BOOL(ftup.i, ftup.x, &n, final_states[i]);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        GrB_Index c = 0;
++        for (GrB_Index k = 0; k < n; ++k)
++            if (cp->new_of_old[ftup.i[k]] != S_NO_STATE)
++                c++;
++        if (c == 0)
++            continue;
++        info = GrB_Vector_new(&cp->finals[i], GrB_BOOL, kept);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
++        for (GrB_Index k = 0; k < n; ++k)
++        {
++            GrB_Index a = cp->new_of_old[ftup.i[k]];
++            if (a == S_NO_STATE)
++                continue;
++            info = GrB_Vector_setElement_BOOL(cp->finals[i], true, a);
++            if (info != GrB_SUCCESS)
++                goto cleanup;
++        }
++    }
++
++cleanup:
++    S_FREE(term_ok);
++    S_FREE(efrom);
++    S_FREE(eto);
++    S_FREE(term_off);
++    S_FREE(foff);
++    S_FREE(roff);
++    S_FREE(fadj);
++    S_FREE(radj);
++    S_FREE(cur);
++    S_FREE(fseen);
++    S_FREE(rseen);
++    S_FREE(keep);
++    S_FREE(queue);
++    S_FREE(new_of_old);
++    S_FREE(old_of_new);
++    s_tuples_free(&ttup);
++    s_tuples_free(&ftup);
++    return info;
++}
++
++
+ #undef H_TRY
+ 
+ typedef struct
+@@ -154,6 +731,9 @@
+     GrB_Vector source_mask = GrB_NULL;
+     GrB_Vector rowvec = GrB_NULL; // length-Q row activity of M
+ 
++    S_Compact compact;
++    memset(&compact, 0, sizeof(compact));
++
+     // reusable call-tuple buffers for the direct flat-layout M_call build
+     GrB_Index *call_i = NULL;
+     GrB_Index *call_j = NULL;
+@@ -266,6 +846,38 @@
+             GRB_TRY(GrB_Vector_size(&n, final_states[i]));
+             LG_ASSERT_MSG(n == Q, GrB_DIMENSION_MISMATCH, "final vector length is not Q");
+         }
++    }
++
++    //--------------------------------------------------------------------------
++    // conservative trimming and internal compaction (patch 2)
++    //--------------------------------------------------------------------------
++
++    bool start_removed = false;
++    LG_TRY(s_compact_build(&compact, Q, V, num_term, num_nonterm, rsm_term, graph_term,
++                           rsm_nonterm, start_states, final_states, start_nonterm,
++                           &start_removed, msg));
++
++    if (start_removed)
++    {
++        // Every original input check above has already run.  No state lies on
++        // an accepting start-to-final control path, so the exact result is the
++        // empty length-V vector.
++        GRB_TRY(GrB_Vector_new(reachable, GrB_BOOL, V));
++        LG_FREE_WORK;
++        return GrB_SUCCESS;
++    }
++
++    // Switch downstream dimensions and arrays to the compact representation.
++    // V, nonterminal ids, and start_nonterminal are unchanged.
++    if (compact.changed)
++    {
++        Q = compact.state_count;
++        num_term = compact.term_count;
++        rsm_term = compact.term;
++        graph_term = compact.graph;
++        rsm_nonterm = compact.nonterm;
++        start_states = compact.start_states;
++        final_states = compact.finals;
+     }
+ 
+     //--------------------------------------------------------------------------

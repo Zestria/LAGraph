@@ -1,0 +1,101 @@
+--- a/baseline.c
++++ b/ds33_format.c
+@@ -29,6 +29,9 @@
+         GrB_free(&s_temp);                                                                         \
+         GrB_free(&rowvec);                                                                         \
+         LAGraph_Free((void **)&term_active, NULL);                                                 \
++        FREE_GRB_MATRIX_ARRAY(graph_term_view, num_term);                                          \
++        LAGraph_Free((void **)&graph_term_nvals, NULL);                                            \
++        LAGraph_Free((void **)&graph_term_native, NULL);                                           \
+         FREE_MATRIX_ARRAY(term_src, num_term);                                                     \
+         LAGraph_Free((void **)&term_src_count, NULL);                                              \
+         LAGraph_Free((void **)&active, NULL);                                                      \
+@@ -101,6 +104,22 @@
+     H_TRY(GrB_Matrix_clear(T));
+     H_TRY(GrB_mxm(T, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, A, B, GrB_NULL));
+     H_TRY(GrB_eWiseAdd(C, GrB_NULL, GrB_NULL, GrB_LOR, C, T, GrB_NULL));
++    return GrB_SUCCESS;
++}
++
++// C |= A * B with the product scratch and both operands in the requested
++// orientation.  B is the selected graph-terminal view; C keeps its baseline
++// orientation.  A and T are restored to their baseline row orientation.
++static GrB_Info s_mul_acc_format(GrB_Matrix C, GrB_Matrix A, GrB_Matrix B, GrB_Matrix T,
++                                 int32_t desired)
++{
++    H_TRY(GrB_Matrix_set_INT32(A, desired, GxB_FORMAT));
++    H_TRY(GrB_Matrix_set_INT32(T, desired, GxB_FORMAT));
++    H_TRY(GrB_Matrix_clear(T));
++    H_TRY(GrB_mxm(T, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL, A, B, GrB_NULL));
++    H_TRY(GrB_eWiseAdd(C, GrB_NULL, GrB_NULL, GrB_LOR, C, T, GrB_NULL));
++    H_TRY(GrB_Matrix_set_INT32(A, GxB_BY_ROW, GxB_FORMAT));
++    H_TRY(GrB_Matrix_set_INT32(T, GxB_BY_ROW, GxB_FORMAT));
+     return GrB_SUCCESS;
+ }
+ 
+@@ -144,6 +163,9 @@
+     GrB_Index num_nonterm = 0;
+ 
+     bool *term_active = NULL;
++    GrB_Index *graph_term_nvals = NULL; // cached terminal graph nvals
++    int32_t *graph_term_native = NULL;  // cached native orientation
++    GrB_Matrix *graph_term_view = NULL; // NULL until the opposite view is built
+     GrB_Index **term_src = NULL;
+     size_t *term_src_count = NULL;
+     bool *active = NULL;
+@@ -276,6 +298,9 @@
+     if (num_term > 0)
+     {
+         LG_TRY(LAGraph_Calloc((void **) &term_active, num_term, sizeof(bool), msg));
++        LG_TRY(LAGraph_Calloc((void **) &graph_term_nvals, num_term, sizeof(GrB_Index), msg));
++        LG_TRY(LAGraph_Calloc((void **) &graph_term_native, num_term, sizeof(int32_t), msg));
++        LG_TRY(LAGraph_Calloc((void **) &graph_term_view, num_term, sizeof(GrB_Matrix), msg));
+         LG_TRY(LAGraph_Calloc((void **) &term_src, num_term, sizeof(GrB_Index *), msg));
+         LG_TRY(LAGraph_Calloc((void **) &term_src_count, num_term, sizeof(size_t), msg));
+ 
+@@ -291,6 +316,10 @@
+                 continue;
+ 
+             term_active[i] = true;
++            graph_term_nvals[i] = gn;
++            int32_t native = GxB_BY_ROW;
++            GRB_TRY(GrB_Matrix_get_INT32(graph_term[i], &native, GxB_FORMAT));
++            graph_term_native[i] = native;
+             LG_TRY(LAGraph_Malloc((void **) &term_src[i], rn, sizeof(GrB_Index), msg));
+             GrB_Index rn2 = rn;
+             GRB_TRY(GrB_Matrix_extractTuples_BOOL(term_src[i], NULL, NULL, &rn2, rsm_term[i]));
+@@ -360,7 +389,33 @@
+             GrB_Index tn = 0;
+             GRB_TRY(GrB_Matrix_nvals(&tn, scratch));
+             if (tn > 0)
+-                LG_TRY(s_mul_acc(acc, scratch, graph_term[i], s_temp));
++            {
++                GrB_Index a = tn;
++                GrB_Index b = graph_term_nvals[i];
++                int32_t desired = (a < b) ? GxB_BY_ROW : GxB_BY_COL;
++
++                if (desired == graph_term_native[i])
++                {
++                    LG_TRY(s_mul_acc(acc, scratch, graph_term[i], s_temp));
++                }
++                else
++                {
++                    if (graph_term_view[i] == GrB_NULL && (double) b > (double) a / 3.0)
++                    {
++                        GRB_TRY(GrB_Matrix_dup(&graph_term_view[i], graph_term[i]));
++                        GRB_TRY(GrB_Matrix_set_INT32(graph_term_view[i], desired, GxB_FORMAT));
++                    }
++                    if (graph_term_view[i] != GrB_NULL)
++                    {
++                        LG_TRY(s_mul_acc_format(acc, scratch, graph_term_view[i], s_temp,
++                                                desired));
++                    }
++                    else
++                    {
++                        LG_TRY(s_mul_acc(acc, scratch, graph_term[i], s_temp));
++                    }
++                }
++            }
+             LG_TRY(s_unshift(scratch, Q, V));
+         }
+ 

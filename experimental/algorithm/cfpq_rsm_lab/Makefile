@@ -1,6 +1,6 @@
 # Stable human entry point; Python CLI also exposes --help.
 VARIANT ?= baseline
-VARIANTS ?= baseline,p1_review,p2_review,p3_review,p4_review
+VARIANTS ?= baseline,p1_full
 RECIPE ?=
 SIZES ?=
 RUN ?=

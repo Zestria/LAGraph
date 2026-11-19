@@ -1,0 +1,127 @@
+--- a/src/adapters/adapter_CFL_CFPQ_RSM.c
++++ b/src/adapters/adapter_CFL_CFPQ_RSM.c
+@@ -42,6 +42,29 @@
+ static void *variant_lib = NULL;
+ static cfpq_rsm_fn variant_run = NULL;
+ 
++// Optional prepared interface. Forward declaration avoids requiring a new
++// installed LAGraph header; old variant libraries keep their one-shot path.
++struct LAGraph_CFPQ_RSM_Plan;
++typedef int (*cfpq_prepare_fn)(struct LAGraph_CFPQ_RSM_Plan **, const RSM *, const GrB_Matrix *, GrB_Index, char *);
++typedef int (*cfpq_execute_fn)(GrB_Vector *, const struct LAGraph_CFPQ_RSM_Plan *, const GrB_Index *, size_t, char *);
++typedef void (*cfpq_free_fn)(struct LAGraph_CFPQ_RSM_Plan **);
++static cfpq_prepare_fn variant_prepare = NULL;
++static cfpq_execute_fn variant_execute = NULL;
++static cfpq_free_fn variant_free = NULL;
++static struct LAGraph_CFPQ_RSM_Plan *prepared = NULL;
++
++static void release_variant(void) {
++    if (prepared != NULL) variant_free(&prepared);
++    if (variant_lib != NULL) dlclose(variant_lib);
++    variant_lib = NULL;
++    variant_run = NULL;
++    variant_prepare = NULL;
++    variant_execute = NULL;
++    variant_free = NULL;
++}
++
++static GrB_Info adapter_CFL_cleanup(void);
++
+ // order-independent hash of the reachable set, used by the lab runner
+ static uint64_t result_hash = 0;
+ 
+@@ -106,11 +129,7 @@
+ static GrB_Info adapter_CFL_prepare(const ParserResult *parser_result, void *prepare_data) {
+     CFL_CFPQ_RSM_PrepareData *data = (CFL_CFPQ_RSM_PrepareData *)prepare_data;
+ 
+-    if (variant_lib != NULL) {
+-        dlclose(variant_lib);
+-        variant_lib = NULL;
+-        variant_run = NULL;
+-    }
++    release_variant();
+     if (data != NULL && data->rsm_lib != NULL) {
+         variant_lib = dlopen(data->rsm_lib, RTLD_NOW | RTLD_LOCAL);
+         if (variant_lib == NULL) {
+@@ -125,6 +144,20 @@
+             return GrB_INVALID_VALUE;
+         }
+         memcpy(&variant_run, &symbol, sizeof(symbol));
++
++        void *prepare = dlsym(variant_lib, "LAGraph_CFPQ_RSM_Prepare");
++        void *execute = dlsym(variant_lib, "LAGraph_CFPQ_RSM_Execute");
++        void *destroy = dlsym(variant_lib, "LAGraph_CFPQ_RSM_FreePrepared");
++        if (prepare != NULL || execute != NULL || destroy != NULL) {
++            if (prepare == NULL || execute == NULL || destroy == NULL) {
++                fprintf(stderr, "incomplete prepared RSM API in %s\n", data->rsm_lib);
++                release_variant();
++                return GrB_INVALID_VALUE;
++            }
++            memcpy(&variant_prepare, &prepare, sizeof(prepare));
++            memcpy(&variant_execute, &execute, sizeof(execute));
++            memcpy(&variant_free, &destroy, sizeof(destroy));
++        }
+     }
+ 
+     ParserResult working_copy = parser_result_copy(parser_result);
+@@ -210,6 +243,19 @@
+     rsm_free(rsm);
+     free_parser_result(&working_copy);
+ 
++    if (variant_prepare != NULL) {
++        double start = LAGraph_WallClockTime();
++        int info = variant_prepare(&prepared, &state.rsm, state.adj_matrices, state.V, state.msg);
++        if (info != GrB_SUCCESS) {
++            fprintf(stderr, "RSM preparation failed: %d (%s)\n", info, state.msg);
++            adapter_CFL_cleanup();
++            return info;
++        }
++        fprintf(stderr, "RSM timing: prepared query; static construction %.9f s (excluded, once per chunk)\n",
++                LAGraph_WallClockTime() - start);
++    } else {
++        fprintf(stderr, "RSM timing: one-shot (static construction included)\n");
++    }
+     return GrB_SUCCESS;
+ }
+ 
+@@ -225,7 +271,9 @@
+ //
+ // this should be called after adapter_CFL_adv_init_outputs
+ static GrB_Info adapter_CFL_run(void) {
+-    int info = variant_run != NULL ? variant_run(state.reachable, &state.rsm, state.adj_matrices, state.sources,
++    int info = variant_execute != NULL ? variant_execute(state.reachable, prepared, state.sources,
++                                                          state.sources_num, state.msg)
++                : variant_run != NULL ? variant_run(state.reachable, &state.rsm, state.adj_matrices, state.sources,
+                                                  state.sources_num, state.V, state.msg)
+                                    : LAGraph_CFPQ_RSM(state.reachable, &state.rsm, state.adj_matrices, state.sources,
+                                                       state.sources_num, state.V, state.msg);
+@@ -275,27 +323,18 @@
+ //
+ // this should be called after all runs of the algorithm for the given config
+ static GrB_Info adapter_CFL_cleanup(void) {
++    release_variant(); // destroy the plan before its borrowed graph matrices
+     TRY(adapter_CFL_cleanup_common(&state.adj_matrices, state.rsm.terminal_count, (void **)NULL));
+     free(state.sources);
+     state.sources = NULL;
+     state.sources_num = 0;
+ 
+-    if (variant_lib != NULL) {
+-        dlclose(variant_lib);
+-        variant_lib = NULL;
+-        variant_run = NULL;
+-    }
+-
+     return GrB_SUCCESS;
+ }
+ 
+ // free LAGraph\GraphBLAS resources
+ static GrB_Info adapter_CFL_teardown(void) {
+-    if (variant_lib != NULL) {
+-        dlclose(variant_lib);
+-        variant_lib = NULL;
+-        variant_run = NULL;
+-    }
++    release_variant();
+     TRY(LAGraph_Finalize(state.msg));
+     return GrB_SUCCESS;
+ }

@@ -1,0 +1,61 @@
+{
+  "candidate_source": "variants/candidates/p1_full__0f85bb5f1dc6.c",
+  "candidate_sha256": "0f85bb5f1dc6b8e1af531010997362086e1463ef68091965c77c559e0d807e38",
+  "moves": [
+    {
+      "name": "p1",
+      "source": "variants/active/p1__d586b953e263.c",
+      "target": "variants/archive/p1__d586b953e263.c",
+      "sha256": "d586b953e263ae54433a0dcb3623e67a1d5113d28c546d48fe3b9fbdbf90a495"
+    },
+    {
+      "name": "p2",
+      "source": "variants/active/p2__791520ee778c.c",
+      "target": "variants/archive/p2__791520ee778c.c",
+      "sha256": "791520ee778c6386d3cd7462cd4ff65329634a6992790599fa55fe1067de10df"
+    },
+    {
+      "name": "p3",
+      "source": "variants/active/p3__2c17d032db6d.c",
+      "target": "variants/archive/p3__2c17d032db6d.c",
+      "sha256": "2c17d032db6d978b1ea82016d19262eed8ba597b10b7044e5b06a04deeada132"
+    },
+    {
+      "name": "p4",
+      "source": "variants/active/p4__0fe833ec9687.c",
+      "target": "variants/archive/p4__0fe833ec9687.c",
+      "sha256": "0fe833ec9687a557dc235a44a02cca613b648f472047fb4e70707c12faf21b9f"
+    },
+    {
+      "name": "stack_p1234",
+      "source": "variants/active/stack_p1234__4e3a96853528.c",
+      "target": "variants/archive/stack_p1234__4e3a96853528.c",
+      "sha256": "4e3a968535284ba4e38617a10f4003bece3a51832c9bc87009f09cfe4f9c557a"
+    },
+    {
+      "name": "p2_review",
+      "source": "variants/active/p2_review__dc0f7c50405b.c",
+      "target": "variants/archive/p2_review__dc0f7c50405b.c",
+      "sha256": "dc0f7c50405bd2cb1ee3d2b9aa7407eecd88bbdcf4318a9e81b05e2bc85e9270"
+    },
+    {
+      "name": "p3_review",
+      "source": "variants/active/p3_review__35109ff0c008.c",
+      "target": "variants/archive/p3_review__35109ff0c008.c",
+      "sha256": "35109ff0c008ba62b095c1500a7df6d1111e505be8dd636dec2e89831a0857b0"
+    },
+    {
+      "name": "p4_review",
+      "source": "variants/active/p4_review__7eefac364098.c",
+      "target": "variants/archive/p4_review__7eefac364098.c",
+      "sha256": "7eefac364098f9f1d6ae353962d4d9baf7be9ed1d96a30160e4698871a671823"
+    },
+    {
+      "name": "p1_prepared",
+      "source": "variants/active/p1_prepared__c26e8e4a08c8.c",
+      "target": "variants/archive/p1_prepared__c26e8e4a08c8.c",
+      "sha256": "c26e8e4a08c85158b07722e7088f8b56351b50f2795222c9d1b17b8039b795fe"
+    }
+  ],
+  "backup": "archive/campaigns/2026-11-17_13-33-11_before-full-coordinates"
+}

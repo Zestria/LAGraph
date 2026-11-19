@@ -1,0 +1,310 @@
+{
+  "schema": 1,
+  "campaign": "cfpq-full-coordinates-validation-2026-11-17",
+  "title": "P1 full-coordinate simplification with inherited OpenMP threading",
+  "input_manifest": "inputs/pinned.json",
+  "input_manifest_sha256": "9738c30c725c0bfbb0738a571195073574590cd7cf908e218b3fd2c54629d7b1",
+  "campaign_sha256": "0a3d185ef66219d8edc98e1710c8e2f82aae6419e2f9b7a1cac4e63cb313afe3",
+  "registry_snapshots": 89,
+  "distinct_source_hashes": 88,
+  "production_sha256": "c7efb94f21bbbddc220ab8371d01cd4c852e3ab110d5942367932676f8916928",
+  "threading_policy": "inherit-openmp-environment",
+  "openmp_environment": {},
+  "cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
+  "overall": "VALIDATED_FOR_CORRECTNESS_AND_TINY_PROFILING",
+  "latest_attempt_at": "2026-11-17T19:45:16.708099+00:00",
+  "tooling": {
+    "status": "PASS",
+    "reason": "receipt and artifacts verified",
+    "receipt": "runs/2026-11-17_22-45-05-245957_tooling-tests/unittest.result.json",
+    "finished_at": "2026-11-17T19:45:16.708099+00:00",
+    "exit_code": 0,
+    "tests": 75
+  },
+  "integrity_audit": {
+    "status": "PASS",
+    "reason": "receipt and artifacts verified",
+    "receipt": "runs/2026-11-17_22-41-11-349485_integrity-check/integrity.result.json",
+    "finished_at": "2026-11-17T19:41:16.798228+00:00",
+    "exit_code": 0,
+    "snapshots": 89
+  },
+  "validation_plan": {
+    "oracle_existing": {
+      "generated_cases": 200,
+      "seed": 2026,
+      "existing_tests": 10
+    },
+    "timing_smoke": {
+      "recipe": "smoke"
+    },
+    "reduced": {
+      "config": "/home/hollow/repo/CFG_bench/tests/data/configs/all.csv",
+      "timeout_seconds": 60
+    },
+    "profile_smoke": {
+      "recipe": "profile_smoke"
+    }
+  },
+  "variants": {
+    "baseline": {
+      "source": "variants/active/baseline__c7efb94f21bb.c",
+      "sha256": "c7efb94f21bbbddc220ab8371d01cd4c852e3ab110d5942367932676f8916928",
+      "integrity": "PASS",
+      "checks": {
+        "oracle_existing": {
+          "status": "PASS",
+          "reason": "receipt and artifacts verified",
+          "receipt": "runs/2026-11-17_22-39-19-264338_full-control-baseline/oracle-existing.result.json",
+          "finished_at": "2026-11-17T19:39:31.125856+00:00",
+          "exit_code": 0,
+          "checks": 19795,
+          "existing_tests": 10
+        },
+        "timing_smoke": {
+          "status": "PASS",
+          "reason": "receipt and artifacts verified",
+          "receipt": "runs/2026-11-17_22-39-51-698299_full-control-review/loaded-smoke.result.json",
+          "finished_at": "2026-11-17T19:40:15.880353+00:00",
+          "exit_code": 0,
+          "cases_per_variant": 1,
+          "rounds": 1,
+          "scope": "tiny smoke; no performance verdict"
+        },
+        "reduced": {
+          "status": "PASS",
+          "reason": "receipt and artifacts verified",
+          "receipt": "runs/2026-11-17_22-39-19-264338_full-control-baseline/reduced15.result.json",
+          "finished_at": "2026-11-17T19:39:50.665511+00:00",
+          "exit_code": 0,
+          "cases": 15,
+          "reference_cache": "cached counts"
+        },
+        "profile_smoke": {
+          "status": "PASS",
+          "reason": "receipt and artifacts verified",
+          "receipt": "runs/2026-11-17_22-40-28-437534_full-profile-baseline/command.result.json",
+          "finished_at": "2026-11-17T19:40:37.058097+00:00",
+          "exit_code": 0,
+          "cases_per_variant": 1,
+          "rounds": 1,
+          "scope": "profile_smoke"
+        }
+      },
+      "performance": {
+        "status": "NOT_RUN",
+        "measured_source_sizes": []
+      },
+      "performance_by_source_size": {
+        "1": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        },
+        "10": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        },
+        "100": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        }
+      },
+      "workload_profiles_by_source_size": {
+        "1": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        },
+        "10": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        },
+        "100": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        }
+      }
+    },
+    "p1_review": {
+      "source": "variants/active/p1_review__1c5ad06ef855.c",
+      "sha256": "1c5ad06ef8558104c9c6f66a90e63aea50f7e187aedaa3a47630b3650a44da3f",
+      "integrity": "PASS",
+      "checks": {
+        "oracle_existing": {
+          "status": "PASS",
+          "reason": "receipt and artifacts verified",
+          "receipt": "runs/2026-11-17_22-39-51-698299_full-control-review/oracle-existing.result.json",
+          "finished_at": "2026-11-17T19:40:05.633811+00:00",
+          "exit_code": 0,
+          "checks": 19795,
+          "existing_tests": 10
+        },
+        "timing_smoke": {
+          "status": "PASS",
+          "reason": "receipt and artifacts verified",
+          "receipt": "runs/2026-11-17_22-39-51-698299_full-control-review/loaded-smoke.result.json",
+          "finished_at": "2026-11-17T19:40:15.880353+00:00",
+          "exit_code": 0,
+          "cases_per_variant": 1,
+          "rounds": 1,
+          "scope": "tiny smoke; no performance verdict"
+        },
+        "reduced": {
+          "status": "PASS",
+          "reason": "receipt and artifacts verified",
+          "receipt": "runs/2026-11-17_22-39-51-698299_full-control-review/reduced15.result.json",
+          "finished_at": "2026-11-17T19:40:27.292925+00:00",
+          "exit_code": 0,
+          "cases": 15,
+          "reference_cache": "cached counts"
+        },
+        "profile_smoke": {
+          "status": "PASS",
+          "reason": "receipt and artifacts verified",
+          "receipt": "runs/2026-11-17_22-40-38-147835_full-profile-review/command.result.json",
+          "finished_at": "2026-11-17T19:40:47.274543+00:00",
+          "exit_code": 0,
+          "cases_per_variant": 1,
+          "rounds": 1,
+          "scope": "profile_smoke"
+        }
+      },
+      "performance": {
+        "status": "NOT_RUN",
+        "measured_source_sizes": []
+      },
+      "performance_by_source_size": {
+        "1": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        },
+        "10": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        },
+        "100": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        }
+      },
+      "workload_profiles_by_source_size": {
+        "1": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        },
+        "10": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        },
+        "100": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        }
+      }
+    },
+    "p1_full": {
+      "source": "variants/candidates/p1_full__0f85bb5f1dc6.c",
+      "sha256": "0f85bb5f1dc6b8e1af531010997362086e1463ef68091965c77c559e0d807e38",
+      "integrity": "PASS",
+      "checks": {
+        "oracle_existing": {
+          "status": "PASS",
+          "reason": "receipt and artifacts verified",
+          "receipt": "runs/2026-11-17_22-37-54-526536_full-coordinates/oracle-existing.result.json",
+          "finished_at": "2026-11-17T19:38:14.691370+00:00",
+          "exit_code": 0,
+          "checks": 19795,
+          "existing_tests": 10
+        },
+        "timing_smoke": {
+          "status": "PASS",
+          "reason": "receipt and artifacts verified",
+          "receipt": "runs/2026-11-17_22-37-54-526536_full-coordinates/loaded-smoke.result.json",
+          "finished_at": "2026-11-17T19:38:29.079485+00:00",
+          "exit_code": 0,
+          "cases_per_variant": 1,
+          "rounds": 1,
+          "scope": "tiny smoke; no performance verdict"
+        },
+        "reduced": {
+          "status": "PASS",
+          "reason": "receipt and artifacts verified",
+          "receipt": "runs/2026-11-17_22-37-54-526536_full-coordinates/reduced15.result.json",
+          "finished_at": "2026-11-17T19:38:44.016922+00:00",
+          "exit_code": 0,
+          "cases": 15,
+          "reference_cache": "cached counts"
+        },
+        "profile_smoke": {
+          "status": "PASS",
+          "reason": "receipt and artifacts verified",
+          "receipt": "runs/2026-11-17_22-40-48-554661_full-profile-candidate/command.result.json",
+          "finished_at": "2026-11-17T19:40:57.822939+00:00",
+          "exit_code": 0,
+          "cases_per_variant": 1,
+          "rounds": 1,
+          "scope": "profile_smoke"
+        }
+      },
+      "performance": {
+        "status": "NOT_RUN",
+        "measured_source_sizes": []
+      },
+      "performance_by_source_size": {
+        "1": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        },
+        "10": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        },
+        "100": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        }
+      },
+      "workload_profiles_by_source_size": {
+        "1": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        },
+        "10": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        },
+        "100": {
+          "status": "NOT_RUN",
+          "reason": "no current-campaign execution receipt"
+        }
+      }
+    }
+  },
+  "problems": [],
+  "failed_attempts": [],
+  "known_limits": [
+    "Threading is chosen by GraphBLAS/OpenMP. The lab never sets or unsets OpenMP variables; inherited settings and CPU affinity are recorded. No per-operation active-thread count is measured. Prior single-thread validation remains in the archived campaign.",
+    "One-round smoke ratios are not speedups. Full-workload performance is measured only for source sizes with a complete accepted full-recipe receipt; coverage is recorded separately.",
+    "Tiny profiles validate instrumentation and result agreement; they do not characterize full Java/RDF/C-alias bottlenecks. Workload-profile attempts are recorded separately by source size.",
+    "Candidate-union and waiting-prefix-overlap probes are uncollected by active profiling and marked unavailable; legacy zero fields are not measurements.",
+    "Matrix memory records are selected allocation snapshots, not complete C-buffer accounting or peak live workspace.",
+    "Bounded sanitizer and allocation-failure checks are recorded separately in PATCH_REVIEW.md; they do not instrument the linked GraphBLAS/LAGraph libraries.",
+    "Reduced-data checks compare counts against a CNF reference that may be cached; exact small-case oracle checks are stronger evidence.",
+    "Historical archived variants and pre-receipt logs are preserved evidence, not newly validated results.",
+    "The requested Avrora/Batik comparison uses run_simple.py with only p1_review and p1_full. Its full performance is not measured by bounded validation or tiny profiling; saved simple-run results are separate from legacy full-recipe receipts."
+  ],
+  "legacy_evidence": "Pre-receipt runs retained in runs/ and build/. They are not promoted into current PASS statuses.",
+  "performance_conclusion": "NOT MEASURED unless a complete pinned full-recipe receipt passes raw acceptance."
+}

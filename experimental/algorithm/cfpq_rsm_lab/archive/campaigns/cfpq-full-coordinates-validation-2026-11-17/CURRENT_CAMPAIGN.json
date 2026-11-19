@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "id": "cfpq-full-coordinates-validation-2026-11-17",
+  "title": "P1 full-coordinate simplification with inherited OpenMP threading",
+  "variants": {
+    "baseline": "c7efb94f21bbbddc220ab8371d01cd4c852e3ab110d5942367932676f8916928",
+    "p1_review": "1c5ad06ef8558104c9c6f66a90e63aea50f7e187aedaa3a47630b3650a44da3f",
+    "p1_full": "0f85bb5f1dc6b8e1af531010997362086e1463ef68091965c77c559e0d807e38"
+  },
+  "validation_plan": {
+    "oracle_existing": {
+      "generated_cases": 200,
+      "seed": 2026,
+      "existing_tests": 10
+    },
+    "timing_smoke": {
+      "recipe": "smoke"
+    },
+    "reduced": {
+      "config": "/home/hollow/repo/CFG_bench/tests/data/configs/all.csv",
+      "timeout_seconds": 60
+    },
+    "profile_smoke": {
+      "recipe": "profile_smoke"
+    }
+  },
+  "planned_performance": {
+    "recipe": "full",
+    "source_sizes": [
+      1,
+      10,
+      100
+    ],
+    "state": "NOT MEASURED; requires a complete accepted full run"
+  },
+  "known_limits": [
+    "Threading is chosen by GraphBLAS/OpenMP. The lab never sets or unsets OpenMP variables; inherited settings and CPU affinity are recorded. No per-operation active-thread count is measured. Prior single-thread validation remains in the archived campaign.",
+    "One-round smoke ratios are not speedups. Full-workload performance is measured only for source sizes with a complete accepted full-recipe receipt; coverage is recorded separately.",
+    "Tiny profiles validate instrumentation and result agreement; they do not characterize full Java/RDF/C-alias bottlenecks. Workload-profile attempts are recorded separately by source size.",
+    "Candidate-union and waiting-prefix-overlap probes are uncollected by active profiling and marked unavailable; legacy zero fields are not measurements.",
+    "Matrix memory records are selected allocation snapshots, not complete C-buffer accounting or peak live workspace.",
+    "Bounded sanitizer and allocation-failure checks are recorded separately in PATCH_REVIEW.md; they do not instrument the linked GraphBLAS/LAGraph libraries.",
+    "Reduced-data checks compare counts against a CNF reference that may be cached; exact small-case oracle checks are stronger evidence.",
+    "Historical archived variants and pre-receipt logs are preserved evidence, not newly validated results.",
+    "The requested Avrora/Batik comparison uses run_simple.py with only p1_review and p1_full. Its full performance is not measured by bounded validation or tiny profiling; saved simple-run results are separate from legacy full-recipe receipts."
+  ],
+  "previous_campaign": "archive/campaigns/2026-11-17_13-33-11_before-full-coordinates/CURRENT_CAMPAIGN.json",
+  "threading_policy": "inherit-openmp-environment",
+  "java_comparison": {
+    "runner": "run_simple.py",
+    "config": "configs/java_points_to.csv",
+    "variants": [
+      "p1_review",
+      "p1_full"
+    ],
+    "reference": "p1_review",
+    "source_sizes": [
+      1,
+      10,
+      100
+    ],
+    "chunks": 30,
+    "rounds": 5,
+    "hot": true,
+    "seed": 2026,
+    "scope": "one-shot; construction and cleanup included"
+  }
+}

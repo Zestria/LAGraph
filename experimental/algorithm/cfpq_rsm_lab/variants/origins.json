@@ -640,7 +640,9 @@
       "build/deepseek-rXWCtw/patch-02/variants/baseline.c",
       "rebuilt-active:p1"
     ],
-    "known_historical_parent": "baseline"
+    "known_historical_parent": "baseline",
+    "current_source": "variants/archive/p1__d586b953e263.c",
+    "archived_from": "variants/active/p1__d586b953e263.c"
   },
   "archive_deepseek_p123": {
     "sha256": "003d590d18123f40e1008ef5991b0dbe6af66063617080622bc117ada279bca5",
@@ -657,7 +659,9 @@
       "build/deepseek-rXWCtw/patch-04/variants/current.c",
       "rebuilt-active:stack_p1234"
     ],
-    "known_historical_parent": "archive_deepseek_p123"
+    "known_historical_parent": "archive_deepseek_p123",
+    "current_source": "variants/archive/stack_p1234__4e3a96853528.c",
+    "archived_from": "variants/active/stack_p1234__4e3a96853528.c"
   },
   "hist_git_d3c4b8f6ac1feb9988df421995ffb7c9fbd87b5e_2ed679bedd62": {
     "sha256": "2ed679bedd62f53bf45fdb89c1edd39f87faa94664d01deef6027032c3503ce7",
@@ -816,21 +820,27 @@
     "origins": [
       "rebuilt-active:p2"
     ],
-    "known_historical_parent": "unknown"
+    "known_historical_parent": "unknown",
+    "current_source": "variants/archive/p2__791520ee778c.c",
+    "archived_from": "variants/active/p2__791520ee778c.c"
   },
   "p3": {
     "sha256": "2c17d032db6d978b1ea82016d19262eed8ba597b10b7044e5b06a04deeada132",
     "origins": [
       "rebuilt-active:p3"
     ],
-    "known_historical_parent": "unknown"
+    "known_historical_parent": "unknown",
+    "current_source": "variants/archive/p3__2c17d032db6d.c",
+    "archived_from": "variants/active/p3__2c17d032db6d.c"
   },
   "p4": {
     "sha256": "0fe833ec9687a557dc235a44a02cca613b648f472047fb4e70707c12faf21b9f",
     "origins": [
       "rebuilt-active:p4"
     ],
-    "known_historical_parent": "unknown"
+    "known_historical_parent": "unknown",
+    "current_source": "variants/archive/p4__0fe833ec9687.c",
+    "archived_from": "variants/active/p4__0fe833ec9687.c"
   },
   "archive_r13_current": {
     "sha256": "c7efb94f21bbbddc220ab8371d01cd4c852e3ab110d5942367932676f8916928",
@@ -845,7 +855,9 @@
       "variants/active/p1_review__1c5ad06ef855.c"
     ],
     "known_historical_parent": "p1",
-    "derivation": "Review polish of standalone p1; baseline-relative patch; original snapshot preserved."
+    "derivation": "Review polish of standalone p1; baseline-relative patch; original snapshot preserved.",
+    "current_source": "variants/archive/p1_review__1c5ad06ef855.c",
+    "archived_from": "variants/active/p1_review__1c5ad06ef855.c"
   },
   "p2_review": {
     "sha256": "dc0f7c50405bd2cb1ee3d2b9aa7407eecd88bbdcf4318a9e81b05e2bc85e9270",
@@ -853,7 +865,9 @@
       "variants/active/p2_review__dc0f7c50405b.c"
     ],
     "known_historical_parent": "p2",
-    "derivation": "Review polish of standalone p2; baseline-relative patch; original snapshot preserved."
+    "derivation": "Review polish of standalone p2; baseline-relative patch; original snapshot preserved.",
+    "current_source": "variants/archive/p2_review__dc0f7c50405b.c",
+    "archived_from": "variants/active/p2_review__dc0f7c50405b.c"
   },
   "p3_review": {
     "sha256": "35109ff0c008ba62b095c1500a7df6d1111e505be8dd636dec2e89831a0857b0",
@@ -861,7 +875,9 @@
       "variants/active/p3_review__35109ff0c008.c"
     ],
     "known_historical_parent": "p3",
-    "derivation": "Review polish of standalone p3; baseline-relative patch; original snapshot preserved."
+    "derivation": "Review polish of standalone p3; baseline-relative patch; original snapshot preserved.",
+    "current_source": "variants/archive/p3_review__35109ff0c008.c",
+    "archived_from": "variants/active/p3_review__35109ff0c008.c"
   },
   "p4_review": {
     "sha256": "7eefac364098f9f1d6ae353962d4d9baf7be9ed1d96a30160e4698871a671823",
@@ -869,6 +885,41 @@
       "variants/active/p4_review__7eefac364098.c"
     ],
     "known_historical_parent": "p4",
-    "derivation": "Review polish of standalone p4; baseline-relative patch; original snapshot preserved."
+    "derivation": "Review polish of standalone p4; baseline-relative patch; original snapshot preserved.",
+    "current_source": "variants/archive/p4_review__7eefac364098.c",
+    "archived_from": "variants/active/p4_review__7eefac364098.c"
+  },
+  "p1_blocks": {
+    "sha256": "697452884c07cc8b22e295ad97ab8eca99e00a97df217c22725fbb8151e7b280",
+    "origins": [
+      "variants/active/p1_blocks__697452884c07.c"
+    ],
+    "known_historical_parent": "p1_review",
+    "derivation": "Literal block-matrix replacement of P1 reviewed terminal transfers. Same family discovery and nonterminal/fixed-point phases; parent-relative patch. Created for comparison with manual endpoint compaction.",
+    "current_source": "variants/archive/p1_blocks__697452884c07.c",
+    "archived_from": "variants/active/p1_blocks__697452884c07.c"
+  },
+  "p1_prepared": {
+    "current_source": "variants/archive/p1_prepared__c26e8e4a08c8.c",
+    "archived_from": "variants/active/p1_prepared__c26e8e4a08c8.c"
+  },
+  "p1_full": {
+    "sha256": "0f85bb5f1dc6b8e1af531010997362086e1463ef68091965c77c559e0d807e38",
+    "origins": [
+      "variants/candidates/p1_full__0f85bb5f1dc6.c"
+    ],
+    "known_historical_parent": "p1_review",
+    "derivation": "Remove observed-endpoint coordinate compression, preserving forward endpoint sharing, membership-only support filtering, batched gather/scatter, family discovery, and the unchanged nonterminal/fixed-point tail.",
+    "current_source": "variants/active/p1_full__0f85bb5f1dc6.c"
+  },
+  "p1_full_clean": {
+    "sha256": "655586ec2c107d5fc75d0f41bc0c132cdec7039803e3bedf24a674be6c40d682",
+    "origins": [
+      "variants/candidates/p1_full_clean.c",
+      "variants/active/p1_full_clean.c"
+    ],
+    "known_historical_parent": "p1_full",
+    "derivation": "Cleanup refactor of p1_full, frozen directly from the candidate source.",
+    "current_source": "variants/active/p1_full_clean__655586ec2c10.c"
   }
 }

@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "id": "cfpq-reviewed-inherited-openmp-validation-2026-11-07",
+  "title": "Reviewed standalone P1-P4 with inherited OpenMP threading",
+  "variants": {
+    "baseline": "c7efb94f21bbbddc220ab8371d01cd4c852e3ab110d5942367932676f8916928",
+    "p1_review": "1c5ad06ef8558104c9c6f66a90e63aea50f7e187aedaa3a47630b3650a44da3f",
+    "p2_review": "dc0f7c50405bd2cb1ee3d2b9aa7407eecd88bbdcf4318a9e81b05e2bc85e9270",
+    "p3_review": "35109ff0c008ba62b095c1500a7df6d1111e505be8dd636dec2e89831a0857b0",
+    "p4_review": "7eefac364098f9f1d6ae353962d4d9baf7be9ed1d96a30160e4698871a671823"
+  },
+  "validation_plan": {
+    "oracle_existing": {
+      "generated_cases": 200,
+      "seed": 2026,
+      "existing_tests": 10
+    },
+    "timing_smoke": {
+      "recipe": "smoke"
+    },
+    "reduced": {
+      "config": "/home/hollow/repo/CFG_bench/tests/data/configs/all.csv",
+      "timeout_seconds": 60
+    },
+    "profile_smoke": {
+      "recipe": "profile_smoke"
+    }
+  },
+  "planned_performance": {
+    "recipe": "full",
+    "source_sizes": [
+      1,
+      10,
+      100
+    ],
+    "state": "NOT MEASURED; requires a complete accepted full run"
+  },
+  "known_limits": [
+    "Threading is chosen by GraphBLAS/OpenMP. The lab never sets or unsets OpenMP variables; inherited settings and CPU affinity are recorded. No per-operation active-thread count is measured. Prior single-thread validation remains in the archived campaign.",
+    "One-round smoke ratios are not speedups. Full-workload performance is measured only for source sizes with a complete accepted full-recipe receipt; coverage is recorded separately.",
+    "Tiny profiles validate instrumentation and result agreement; they do not characterize full Java/RDF/C-alias bottlenecks. Workload-profile attempts are recorded separately by source size.",
+    "Candidate-union and waiting-prefix-overlap probes are uncollected by active profiling and marked unavailable; legacy zero fields are not measurements.",
+    "Matrix memory records are selected allocation snapshots, not complete C-buffer accounting or peak live workspace.",
+    "Bounded sanitizer and allocation-failure checks are recorded separately in PATCH_REVIEW.md; they do not instrument the linked GraphBLAS/LAGraph libraries.",
+    "Reduced-data checks compare counts against a CNF reference that may be cached; exact small-case oracle checks are stronger evidence.",
+    "Fusion retains full global state dimensions and per-continuation work; the status does not imply a runtime or memory benefit.",
+    "Historical archived variants and pre-receipt logs are preserved evidence, not newly validated results."
+  ],
+  "previous_campaign": "archive/campaigns/cfpq-reviewed-standalone-validation-2026-11-07/CURRENT_CAMPAIGN.json",
+  "threading_policy": "inherit-openmp-environment"
+}

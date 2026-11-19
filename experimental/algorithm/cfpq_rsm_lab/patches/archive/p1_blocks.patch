@@ -1,0 +1,974 @@
+--- a/experimental/algorithm/LAGraph_CFPQ_RSM.c
++++ b/experimental/algorithm/LAGraph_CFPQ_RSM.c
+@@ -1,3 +1,10 @@
++// Literal block-matrix version of P1 reviewed (parent SHA-256 1c5ad06ef855...).
++// Read s_group_build_blocks(), s_group_forward(), and s_group_dual() first.
++// Only terminal-family storage/transfers differ: family discovery, ordinary
++// fallback, nonterminal calls/returns, and the fixed-point loop retain P1 logic.
++// Construction is inside this one-shot call, as in P1 reviewed. Logical block
++// axes have K*V positions; matrix storage and parallelism are left to GraphBLAS.
++
+ #define FREE_MATRIX_ARRAY(array, len)                                                              \
+     {                                                                                              \
+         if ((array) != NULL)                                                                       \
+@@ -29,13 +36,8 @@
+         GrB_free(&s_temp);                                                                         \
+         GrB_free(&rowvec);                                                                         \
+         GrB_free(&fscratch);                                                                       \
+-        GrB_free(&dprod);                                                                          \
+-        GrB_free(&gbuild);                                                                         \
+         LAGraph_Free((void **)&term_active, NULL);                                                 \
+         s_groupset_free(&groupset, num_term);                                                      \
+-        s_tuples_free(&gtup);                                                                      \
+-        s_tuples_free(&atup);                                                                      \
+-        s_tuples_free(&mtup);                                                                      \
+         LAGraph_Free((void **)&active, NULL);                                                      \
+         LAGraph_Free((void **)&active_idx, NULL);                                                  \
+         GrB_free(&new_edges);                                                                      \
+@@ -126,31 +128,7 @@
+     return GrB_SUCCESS;
+ }
+ 
+-//------------------------------------------------------------------------------
+-// grouped terminal transfers
+-//------------------------------------------------------------------------------
+-//
+-// A terminal family is a set of indexed terminal transitions that share one
+-// endpoint: either one source state (`q --t_i--> p_i`, a forward family) or one
+-// destination state (`q_i --t_i--> r`, a dual family).  The family is evaluated
+-// with one compact product over only the observed (transition, vertex) support
+-// in the graph relations; the result is scattered back to the global
+-// configuration layout.  Families are discovered from transition topology and
+-// graph support only, so no terminal names, label numbering, or box ownership
+-// metadata is assumed.  Every transition belongs to at most one family; the
+-// remaining transitions use the ordinary per-label path.
+-
+-#define S_HASH_EMPTY UINT64_MAX
+-#define S_NO_COL ((GrB_Index)-1)
+-
+-typedef struct
+-{
+-    uint64_t *key_a;  // global member id, or S_HASH_EMPTY when the slot is free
+-    uint64_t *key_b;  // observed vertex
+-    GrB_Index *col;   // family-local compact column
+-    size_t cap;       // power of two
+-    size_t count;
+-} S_Hash;
++// Literal terminal families; setup tuple buffers describe RSM transitions only.
+ 
+ // reusable tuple arrays (both GrB_Index and Boolean value arrays)
+ typedef struct
+@@ -160,44 +138,6 @@
+     bool *x;
+     GrB_Index cap;
+ } S_TupleBuf;
+-
+-typedef struct
+-{
+-    bool dual;             // false: shared source; true: shared destination
+-    GrB_Index anchor;      // shared source or destination state
+-    GrB_Index member_base; // first global member id of this family
+-    size_t ntrans;
+-    GrB_Index *label;      // [ntrans] terminal label of each transition
+-    GrB_Index *from;       // [ntrans]
+-    GrB_Index *to;         // [ntrans]
+-    GrB_Index *member_tr;  // [ntrans] index into the flat transition list
+-    GrB_Index ncols;       // compact axis length (observed support)
+-    GrB_Index col_cap;     // capacity of col_member / col_vertex
+-    GrB_Index *col_member; // [ncols] local member id of a compact column
+-    GrB_Index *col_vertex; // [ncols] w (forward) or v (dual)
+-    GrB_Matrix inc;        // forward H: V x ncols; dual J: ncols x V
+-    GrB_Matrix tmp;        // forward Y: V x ncols; dual F_in: V x ncols
+-    bool live;             // runtime flag: family has active source rows
+-    GrB_Index *fi_u;       // dual gather tuples: entry row u
+-    GrB_Index *fi_c;       // dual gather tuples: compact column
+-    bool *fi_x;            // dual gather values (always true)
+-    GrB_Index fi_n;
+-    GrB_Index fi_cap;
+-} S_Group;
+-
+-typedef struct
+-{
+-    S_Group *groups;
+-    size_t ngroups;
+-    S_Hash hash;         // graph support keyed by (global member id, vertex)
+-    GrB_Index *dual_off; // [Q+1] CSR of dual-family members by source state
+-    GrB_Index *dual_group;
+-    GrB_Index *dual_local;
+-    GrB_Index ndual;
+-    GrB_Matrix *ord_term;      // [num_term] residual ordinary terminal matrices
+-    GrB_Index **ord_src;       // [num_term] active-source prediction lists
+-    size_t *ord_src_count;     // [num_term]
+-} S_GroupSet;
+ 
+ static void s_tuples_free(S_TupleBuf *b)
+ {
+@@ -240,228 +180,49 @@
+     return GrB_SUCCESS;
+ }
+ 
+-static uint64_t s_hash_mix(uint64_t a, uint64_t b)
+-{
+-    uint64_t x = (a * 0x9E3779B97F4A7C15ULL) ^ (b + 0x9E3779B97F4A7C15ULL);
+-    x ^= x >> 30;
+-    x *= 0xBF58476D1CE4E5B9ULL;
+-    x ^= x >> 27;
+-    x *= 0x94D049BB133111EBULL;
+-    x ^= x >> 31;
+-    return x;
+-}
+-
+-static void s_hash_free(S_Hash *h)
+-{
+-    LAGraph_Free((void **)&h->key_a, NULL);
+-    LAGraph_Free((void **)&h->key_b, NULL);
+-    LAGraph_Free((void **)&h->col, NULL);
+-    h->cap = 0;
+-    h->count = 0;
+-}
+-
+-static GrB_Info s_hash_alloc(S_Hash *h, size_t cap, char *msg)
+-{
+-    if (cap < 16)
+-        cap = 16;
+-    if (cap > SIZE_MAX / sizeof(uint64_t))
+-        return GrB_OUT_OF_MEMORY;
+-
+-    uint64_t *ka = NULL;
+-    uint64_t *kb = NULL;
+-    GrB_Index *col = NULL;
+-    int st;
+-    st = LAGraph_Malloc((void **)&ka, cap, sizeof(uint64_t), msg);
+-    if (st < 0)
+-        return (GrB_Info)st;
+-    st = LAGraph_Malloc((void **)&kb, cap, sizeof(uint64_t), msg);
+-    if (st < 0)
+-    {
+-        LAGraph_Free((void **)&ka, NULL);
+-        return (GrB_Info)st;
+-    }
+-    st = LAGraph_Malloc((void **)&col, cap, sizeof(GrB_Index), msg);
+-    if (st < 0)
+-    {
+-        LAGraph_Free((void **)&ka, NULL);
+-        LAGraph_Free((void **)&kb, NULL);
+-        return (GrB_Info)st;
+-    }
+-
+-    memset(ka, 0xFF, cap * sizeof(uint64_t)); // S_HASH_EMPTY
+-    h->key_a = ka;
+-    h->key_b = kb;
+-    h->col = col;
+-    h->cap = cap;
+-    h->count = 0;
+-    return GrB_SUCCESS;
+-}
+-
+-static GrB_Info s_hash_grow(S_Hash *h, char *msg)
+-{
+-    if (h->cap > (SIZE_MAX / 2))
+-        return GrB_OUT_OF_MEMORY;
+-
+-    S_Hash bigger;
+-    memset(&bigger, 0, sizeof(bigger));
+-    GrB_Info info = s_hash_alloc(&bigger, h->cap * 2, msg);
+-    if (info != GrB_SUCCESS)
+-        return info;
+-
+-    for (size_t k = 0; k < h->cap; ++k)
+-    {
+-        if (h->key_a[k] == S_HASH_EMPTY)
+-            continue;
+-        uint64_t mask = (uint64_t)(bigger.cap - 1);
+-        uint64_t p = s_hash_mix(h->key_a[k], h->key_b[k]) & mask;
+-        while (bigger.key_a[p] != S_HASH_EMPTY)
+-            p = (p + 1) & mask;
+-        bigger.key_a[p] = h->key_a[k];
+-        bigger.key_b[p] = h->key_b[k];
+-        bigger.col[p] = h->col[k];
+-        bigger.count++;
+-    }
+-
+-    s_hash_free(h);
+-    *h = bigger;
+-    return GrB_SUCCESS;
+-}
+-
+-// Find or insert (a,b).  On a new key, `next_col` is its value; on an existing
+-// key the stored column is returned and is_new is false.
+-static GrB_Info s_hash_get_or_add(S_Hash *h, uint64_t a, uint64_t b, GrB_Index next_col,
+-                                  GrB_Index *col_out, bool *is_new, char *msg)
+-{
+-    if (h->cap == 0)
+-    {
+-        GrB_Info info = s_hash_alloc(h, 64, msg);
+-        if (info != GrB_SUCCESS)
+-            return info;
+-    }
+-    if (h->count + 1 >= h->cap - h->cap / 4)
+-    {
+-        GrB_Info info = s_hash_grow(h, msg);
+-        if (info != GrB_SUCCESS)
+-            return info;
+-    }
+-
+-    uint64_t mask = (uint64_t)(h->cap - 1);
+-    uint64_t p = s_hash_mix(a, b) & mask;
+-    while (h->key_a[p] != S_HASH_EMPTY)
+-    {
+-        if (h->key_a[p] == a && h->key_b[p] == b)
+-        {
+-            *col_out = h->col[p];
+-            *is_new = false;
+-            return GrB_SUCCESS;
+-        }
+-        p = (p + 1) & mask;
+-    }
+-    h->key_a[p] = a;
+-    h->key_b[p] = b;
+-    h->col[p] = next_col;
+-    h->count++;
+-    *col_out = next_col;
+-    *is_new = true;
+-    return GrB_SUCCESS;
+-}
+-
+-static bool s_hash_lookup(const S_Hash *h, uint64_t a, uint64_t b, GrB_Index *col_out)
+-{
+-    if (h->cap == 0)
+-        return false;
+-    uint64_t mask = (uint64_t)(h->cap - 1);
+-    uint64_t p = s_hash_mix(a, b) & mask;
+-    while (h->key_a[p] != S_HASH_EMPTY)
+-    {
+-        if (h->key_a[p] == a && h->key_b[p] == b)
+-        {
+-            *col_out = h->col[p];
+-            return true;
+-        }
+-        p = (p + 1) & mask;
+-    }
+-    return false;
+-}
+-
+-static GrB_Info s_group_reserve_cols(S_Group *g, GrB_Index need, char *msg)
+-{
+-    if (need <= g->col_cap)
+-        return GrB_SUCCESS;
+-
+-    GrB_Index cap = (g->col_cap == 0) ? 64 : g->col_cap;
+-    while (cap < need)
+-    {
+-        if (cap > (GrB_Index)(SIZE_MAX / (8 * sizeof(GrB_Index))))
+-        {
+-            cap = need;
+-            break;
+-        }
+-        cap *= 2;
+-    }
+-
+-    int st;
+-    st = LAGraph_Realloc((void **)&g->col_member, (size_t)cap, (size_t)g->col_cap,
+-                         sizeof(GrB_Index), msg);
+-    if (st < 0)
+-        return (GrB_Info)st;
+-    st = LAGraph_Realloc((void **)&g->col_vertex, (size_t)cap, (size_t)g->col_cap,
+-                         sizeof(GrB_Index), msg);
+-    if (st < 0)
+-        return (GrB_Info)st;
+-    g->col_cap = cap;
+-    return GrB_SUCCESS;
+-}
+-
+-static GrB_Info s_group_fi_append(S_Group *g, GrB_Index u, GrB_Index c, char *msg)
+-{
+-    if (g->fi_n == g->fi_cap)
+-    {
+-        GrB_Index cap = (g->fi_cap == 0) ? 64 : g->fi_cap;
+-        while (cap <= g->fi_n)
+-        {
+-            if (cap > (GrB_Index)(SIZE_MAX / (8 * sizeof(GrB_Index))))
+-            {
+-                cap = g->fi_n + 1;
+-                break;
+-            }
+-            cap *= 2;
+-        }
+-        int st;
+-        st = LAGraph_Realloc((void **)&g->fi_u, (size_t)cap, (size_t)g->fi_cap,
+-                             sizeof(GrB_Index), msg);
+-        if (st < 0)
+-            return (GrB_Info)st;
+-        st = LAGraph_Realloc((void **)&g->fi_c, (size_t)cap, (size_t)g->fi_cap,
+-                             sizeof(GrB_Index), msg);
+-        if (st < 0)
+-            return (GrB_Info)st;
+-        st = LAGraph_Realloc((void **)&g->fi_x, (size_t)cap, (size_t)g->fi_cap, sizeof(bool),
+-                             msg);
+-        if (st < 0)
+-            return (GrB_Info)st;
+-        g->fi_cap = cap;
+-    }
+-    g->fi_u[g->fi_n] = u;
+-    g->fi_c[g->fi_n] = c;
+-    g->fi_x[g->fi_n] = true;
+-    g->fi_n++;
+-    return GrB_SUCCESS;
+-}
++// A family with K transitions uses the full K*V block axis. GraphBLAS chooses
++// the sparse/bitmap/full storage; we do not enumerate graph edges, hash observed
++// endpoints, merge columns, or remap individual frontier/product entries.
++typedef struct
++{
++    bool dual;                // false: shared source; true: shared destination
++    GrB_Index anchor;         // that source or destination RSM state
++    size_t ntrans;            // K, the number of transitions in this family
++    GrB_Index *label;          // [K] graph relation used by each block
++    GrB_Index *from;           // [K] source RSM states
++    GrB_Index *to;             // [K] destination RSM states
++    GrB_Index *member_tr;      // [K] setup-only transition IDs for fallback
++    GrB_Index ncols;           // K*V, with every vertex position retained
++    GrB_Matrix inc;            // forward H: V x KV; dual J: KV x V
++    GrB_Matrix tmp;            // forward Y: V x KV; dual Y: V x V
++    GrB_Matrix D;              // dual only: [F_r0 | ... | F_r(K-1)], V x KV
++    GrB_Matrix *frontier_tiles;// dual only: K reusable V x V frontier slices
++} S_Group;
++
++typedef struct
++{
++    S_Group *groups;
++    size_t ngroups;
++    GrB_Matrix *ord_term;      // residual transitions not assigned to a family
++    GrB_Index **ord_src;
++    size_t *ord_src_count;
++} S_GroupSet;
+ 
+ static void s_group_free(S_Group *g)
+ {
++    if (g->frontier_tiles != NULL)
++    {
++        for (size_t m = 0; m < g->ntrans; ++m)
++            GrB_free(&g->frontier_tiles[m]);
++        LAGraph_Free((void **)&g->frontier_tiles, NULL);
++    }
++    GrB_free(&g->D);
++    GrB_free(&g->inc);
++    GrB_free(&g->tmp);
+     LAGraph_Free((void **)&g->label, NULL);
+     LAGraph_Free((void **)&g->from, NULL);
+     LAGraph_Free((void **)&g->to, NULL);
+     LAGraph_Free((void **)&g->member_tr, NULL);
+-    LAGraph_Free((void **)&g->col_member, NULL);
+-    LAGraph_Free((void **)&g->col_vertex, NULL);
+-    LAGraph_Free((void **)&g->fi_u, NULL);
+-    LAGraph_Free((void **)&g->fi_c, NULL);
+-    LAGraph_Free((void **)&g->fi_x, NULL);
+-    GrB_free(&g->inc);
+-    GrB_free(&g->tmp);
+     memset(g, 0, sizeof(*g));
+ }
+ 
+@@ -473,13 +234,6 @@
+             s_group_free(&gs->groups[k]);
+         LAGraph_Free((void **)&gs->groups, NULL);
+     }
+-    gs->ngroups = 0;
+-    s_hash_free(&gs->hash);
+-    LAGraph_Free((void **)&gs->dual_off, NULL);
+-    LAGraph_Free((void **)&gs->dual_group, NULL);
+-    LAGraph_Free((void **)&gs->dual_local, NULL);
+-    gs->ndual = 0;
+-
+     if (gs->ord_term != NULL)
+     {
+         for (GrB_Index t = 0; t < num_term; ++t)
+@@ -493,6 +247,139 @@
+         LAGraph_Free((void **)&gs->ord_src, NULL);
+     }
+     LAGraph_Free((void **)&gs->ord_src_count, NULL);
++    gs->ngroups = 0;
++}
++
++// Construct exactly the block matrices in the formulas. The temporary tile
++// array borrows graph matrices: concatenation copies entries, not ownership.
++static GrB_Info s_group_build_blocks(S_Group *g, GrB_Index V,
++                                     const GrB_Matrix *graph_term, char *msg)
++{
++    GrB_Info info = GrB_SUCCESS;
++    GrB_Matrix *tiles = NULL;
++#define B_TRY(expr) do { info = (expr); if (info != GrB_SUCCESS) goto cleanup; } while (0)
++    B_TRY(LAGraph_Malloc((void **)&tiles, g->ntrans, sizeof(*tiles), msg));
++    for (size_t m = 0; m < g->ntrans; ++m)
++        tiles[m] = graph_term[g->label[m]];
++
++    if (!g->dual)
++    {
++        // H = [G_0 | G_1 | ... | G_(K-1)], dimensions V x (K*V).
++        B_TRY(GrB_Matrix_new(&g->inc, GrB_BOOL, V, g->ncols));
++        B_TRY(GxB_Matrix_concat(g->inc, tiles, 1, g->ntrans, GrB_NULL));
++        B_TRY(GrB_Matrix_new(&g->tmp, GrB_BOOL, V, g->ncols));
++    }
++    else
++    {
++        // J = [G_0; G_1; ...; G_(K-1)], dimensions (K*V) x V.
++        B_TRY(GrB_Matrix_new(&g->inc, GrB_BOOL, g->ncols, V));
++        B_TRY(GxB_Matrix_concat(g->inc, tiles, g->ntrans, 1, GrB_NULL));
++        B_TRY(GrB_Matrix_new(&g->D, GrB_BOOL, V, g->ncols));
++        B_TRY(GrB_Matrix_new(&g->tmp, GrB_BOOL, V, V));
++        B_TRY(LAGraph_Calloc((void **)&g->frontier_tiles, g->ntrans,
++                             sizeof(*g->frontier_tiles), msg));
++        for (size_t m = 0; m < g->ntrans; ++m)
++            B_TRY(GrB_Matrix_new(&g->frontier_tiles[m], GrB_BOOL, V, V));
++    }
++
++cleanup:
++    LAGraph_Free((void **)&tiles, NULL);
++#undef B_TRY
++    return info;
++}
++
++// F_q[u,v] = M[q, u*V+v]. Extract the complete row and reshape it by row.
++// With no mask/accumulator, extract replaces F, including empty positions.
++static GrB_Info s_frontier_slice(GrB_Matrix F, GrB_Matrix M,
++                                 GrB_Index q, GrB_Index V)
++{
++    H_TRY(GxB_Matrix_reshape(F, false, 1, V * V, GrB_NULL));
++    H_TRY(GrB_Matrix_extract(F, GrB_NULL, GrB_NULL, M, &q, 1,
++                             GrB_ALL, V * V, GrB_NULL));
++    H_TRY(GxB_Matrix_reshape(F, false, V, V, GrB_NULL));
++    return GrB_SUCCESS;
++}
++
++// acc uses row q*V+u and column v. Add one V x V result to state q.
++// OR accumulation also handles several family members returning to one state.
++static GrB_Info s_accumulate_block(GrB_Matrix acc, GrB_Matrix block,
++                                   GrB_Index q, GrB_Index V, bool *acc_empty)
++{
++    GrB_Index nvals = 0;
++    H_TRY(GrB_Matrix_nvals(&nvals, block));
++    if (nvals == 0)
++        return GrB_SUCCESS;
++
++    GrB_Index rows[2] = {q * V, (q + 1) * V - 1};
++    H_TRY(GrB_Matrix_assign(acc, GrB_NULL, GrB_LOR, block,
++                            rows, GxB_RANGE, GrB_ALL, V, GrB_NULL));
++    *acc_empty = false;
++    return GrB_SUCCESS;
++}
++
++// First type: a shared source s and transitions s --t_m--> d_m.
++// H is fixed. One multiplication computes Y = F_s H. Block m of Y
++// contains F_s G_m, and is assigned to the corresponding destination d_m.
++static GrB_Info s_group_forward(S_Group *g, GrB_Index V, GrB_Matrix M,
++                                GrB_Matrix block, GrB_Matrix acc, bool *acc_empty)
++{
++    H_TRY(s_frontier_slice(block, M, g->anchor, V));
++    H_TRY(GrB_mxm(g->tmp, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL,
++                   block, g->inc, GrB_NULL)); // Y = F_s H
++
++    for (size_t m = 0; m < g->ntrans; ++m)
++    {
++        GrB_Index cols[2] = {m * V, (m + 1) * V - 1};
++        H_TRY(GrB_Matrix_extract(block, GrB_NULL, GrB_NULL, g->tmp,
++                                 GrB_ALL, V, cols, GxB_RANGE, GrB_NULL));
++        H_TRY(s_accumulate_block(acc, block, g->to[m], V, acc_empty));
++    }
++    return GrB_SUCCESS;
++}
++
++// Second type: transitions r_m --t_m--> d with one shared destination d.
++// D = [F_r0 | ... | F_r(K-1)], J = [G_0; ...; G_(K-1)].
++// Y = D J = OR_m(F_rm G_m), already a single V x V destination block.
++static GrB_Info s_group_dual(S_Group *g, GrB_Index V, GrB_Matrix M,
++                             GrB_Matrix acc, bool *acc_empty)
++{
++    for (size_t m = 0; m < g->ntrans; ++m)
++        H_TRY(s_frontier_slice(g->frontier_tiles[m], M, g->from[m], V));
++
++    H_TRY(GxB_Matrix_concat(g->D, g->frontier_tiles, 1, g->ntrans, GrB_NULL));
++    H_TRY(GrB_mxm(g->tmp, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL,
++                   g->D, g->inc, GrB_NULL)); // Y = D J
++    H_TRY(s_accumulate_block(acc, g->tmp, g->anchor, V, acc_empty));
++    return GrB_SUCCESS;
++}
++
++// Keep P1's activity-based family dispatch. Only the representation and
++// terminal-transfer operations change; all nonterminal/call/return phases stay
++// identical to P1 reviewed. No OpenMP or GraphBLAS thread settings are changed.
++static GrB_Info s_apply_groups(S_GroupSet *gs, GrB_Index V, GrB_Matrix M,
++                               const bool *active, GrB_Matrix block,
++                               GrB_Matrix acc, bool *acc_empty, char *msg)
++{
++    for (size_t gi = 0; gi < gs->ngroups; ++gi)
++    {
++        S_Group *g = &gs->groups[gi];
++        if (g->ntrans == 0)
++            continue;
++        if (!g->dual)
++        {
++            if (active[g->anchor])
++                H_TRY(s_group_forward(g, V, M, block, acc, acc_empty));
++        }
++        else
++        {
++            bool live = false;
++            for (size_t m = 0; m < g->ntrans; ++m)
++                live = live || active[g->from[m]];
++            if (live)
++                H_TRY(s_group_dual(g, V, M, acc, acc_empty));
++        }
++    }
++    return GrB_SUCCESS;
+ }
+ 
+ typedef struct
+@@ -536,111 +423,11 @@
+     return 0;
+ }
+ 
+-// Build a forward family's incidence H (V x ncols) and its product scratch.
+-static GrB_Info s_group_build_forward(S_Group *g, GrB_Index V, const GrB_Matrix *graph_term,
+-                                      S_Hash *hash, S_TupleBuf *htup, S_TupleBuf *gtup, char *msg)
+-{
+-    g->ncols = 0;
+-    GrB_Index h_n = 0;
+-
+-    for (size_t m = 0; m < g->ntrans; ++m)
+-    {
+-        GrB_Index gn = 0;
+-        H_TRY(GrB_Matrix_nvals(&gn, graph_term[g->label[m]]));
+-        if (gn > SIZE_MAX / sizeof(GrB_Index) - h_n)
+-            return GrB_OUT_OF_MEMORY;
+-        H_TRY(s_tuples_reserve(gtup, gn, msg));
+-        H_TRY(s_tuples_reserve(htup, h_n + gn, msg));
+-        GrB_Index n = gn;
+-        H_TRY(GrB_Matrix_extractTuples_BOOL(gtup->i, gtup->j, gtup->x, &n,
+-                                            graph_term[g->label[m]]));
+-        // Labels with the same destination have identical continuations.
+-        // Merge their observed endpoints, retaining a representative member
+-        // solely for the scatter map. Different destinations stay distinct.
+-        uint64_t gm = (uint64_t)g->to[m];
+-        for (GrB_Index k = 0; k < n; ++k)
+-        {
+-            GrB_Index col = 0;
+-            bool is_new = false;
+-            H_TRY(s_hash_get_or_add(hash, gm, (uint64_t)gtup->j[k], g->ncols, &col, &is_new,
+-                                    msg));
+-            if (is_new)
+-            {
+-                H_TRY(s_group_reserve_cols(g, g->ncols + 1, msg));
+-                g->col_member[g->ncols] = (GrB_Index)m;
+-                g->col_vertex[g->ncols] = gtup->j[k];
+-                g->ncols++;
+-            }
+-            htup->i[h_n] = gtup->i[k];
+-            htup->j[h_n] = col;
+-            htup->x[h_n] = true;
+-            h_n++;
+-        }
+-    }
+-
+-    if (g->ncols == 0)
+-        return GrB_SUCCESS;
+-
+-    H_TRY(GrB_Matrix_new(&g->inc, GrB_BOOL, V, g->ncols));
+-    H_TRY(GrB_Matrix_build_BOOL(g->inc, htup->i, htup->j, htup->x, h_n, GrB_LOR));
+-    H_TRY(GrB_Matrix_new(&g->tmp, GrB_BOOL, V, g->ncols));
+-    return GrB_SUCCESS;
+-}
+-
+-// Build a dual family's incidence J (ncols x V) and its product scratch.
+-static GrB_Info s_group_build_dual(S_Group *g, GrB_Index V, const GrB_Matrix *graph_term,
+-                                   S_Hash *hash, S_TupleBuf *htup, S_TupleBuf *gtup, char *msg)
+-{
+-    g->ncols = 0;
+-    GrB_Index h_n = 0;
+-
+-    for (size_t m = 0; m < g->ntrans; ++m)
+-    {
+-        GrB_Index gn = 0;
+-        H_TRY(GrB_Matrix_nvals(&gn, graph_term[g->label[m]]));
+-        if (gn > SIZE_MAX / sizeof(GrB_Index) - h_n)
+-            return GrB_OUT_OF_MEMORY;
+-        H_TRY(s_tuples_reserve(gtup, gn, msg));
+-        H_TRY(s_tuples_reserve(htup, h_n + gn, msg));
+-        GrB_Index n = gn;
+-        H_TRY(GrB_Matrix_extractTuples_BOOL(gtup->i, gtup->j, gtup->x, &n,
+-                                            graph_term[g->label[m]]));
+-        uint64_t gm = (uint64_t)(g->member_base + (GrB_Index)m);
+-        for (GrB_Index k = 0; k < n; ++k)
+-        {
+-            GrB_Index col = 0;
+-            bool is_new = false;
+-            H_TRY(s_hash_get_or_add(hash, gm, (uint64_t)gtup->i[k], g->ncols, &col, &is_new,
+-                                    msg));
+-            if (is_new)
+-            {
+-                H_TRY(s_group_reserve_cols(g, g->ncols + 1, msg));
+-                g->col_member[g->ncols] = (GrB_Index)m;
+-                g->col_vertex[g->ncols] = gtup->i[k];
+-                g->ncols++;
+-            }
+-            htup->i[h_n] = col;
+-            htup->j[h_n] = gtup->j[k];
+-            htup->x[h_n] = true;
+-            h_n++;
+-        }
+-    }
+-
+-    if (g->ncols == 0)
+-        return GrB_SUCCESS;
+-
+-    H_TRY(GrB_Matrix_new(&g->inc, GrB_BOOL, g->ncols, V));
+-    H_TRY(GrB_Matrix_build_BOOL(g->inc, htup->i, htup->j, htup->x, h_n, GrB_LOR));
+-    H_TRY(GrB_Matrix_new(&g->tmp, GrB_BOOL, V, g->ncols));
+-    return GrB_SUCCESS;
+-}
+-
+-// Discover families, build their immutable support maps, and build the residual
++// Discover families, build their full block matrices, and build the residual
+ // ordinary terminal matrices.  On failure, partially built state stays in `gs`
+ // for the caller's cleanup; helper-local scratch is always released here.
+ static GrB_Info s_build_groups(S_GroupSet *gs, GrB_Index Q, GrB_Index V, GrB_Index num_term,
+-                               GrB_Matrix *rsm_term, const GrB_Matrix *graph_term, bool *term_active,
+-                               S_TupleBuf *gtup, char *msg)
++                               GrB_Matrix *rsm_term, const GrB_Matrix *graph_term, bool *term_active, char *msg)
+ {
+     GrB_Info info = GrB_SUCCESS;
+     GrB_Index *tr_label = NULL;
+@@ -655,9 +442,7 @@
+     S_Cand *cands = NULL;
+     bool *assigned = NULL;
+     S_TupleBuf ttup;
+-    S_TupleBuf htup;
+     memset(&ttup, 0, sizeof(ttup));
+-    memset(&htup, 0, sizeof(htup));
+ 
+     // flat list of supported terminal transitions, grouped by label
+     GrB_Index total = 0;
+@@ -817,89 +602,23 @@
+         }
+     }
+ 
+-    // deterministic global member ids and immutable incidence maps
+-    GrB_Index next_base = 0;
++    // Exactly P1's selected families, using full K*V axes instead of compact
++    // endpoint IDs. Fall back to ordinary terminals if a block is too large.
+     for (size_t gi = 0; gi < gs->ngroups; ++gi)
+     {
+         S_Group *g = &gs->groups[gi];
+-        g->member_base = next_base;
+-        // Forward lookup is used only while building H. Retain only dual
+-        // support in the runtime hash used by the frontier gather.
+-        S_Hash forward_hash = {0};
+-        GrB_Info binfo = g->dual
+-                             ? s_group_build_dual(g, V, graph_term, &gs->hash, &htup, gtup, msg)
+-                             : s_group_build_forward(g, V, graph_term, &forward_hash, &htup, gtup,
+-                                                     msg);
+-        s_hash_free(&forward_hash);
+-        if (binfo != GrB_SUCCESS)
+-        {
+-            info = binfo;
+-            goto cleanup;
+-        }
+-        if (g->ncols == 0)
+-        {
+-            // no observed support: release the slot and let the ordinary path
+-            // handle all its transitions
++        if (s_mul_exceeds((GrB_Index)g->ntrans, V, CFPQ_MAX_DIM) ||
++            s_mul_exceeds(V, (GrB_Index)g->ntrans * V, CFPQ_MAX_DIM))
++        {
+             for (size_t m = 0; m < g->ntrans; ++m)
+                 assigned[g->member_tr[m]] = false;
+             s_group_free(g);
+             continue;
+         }
+-        if (s_mul_exceeds(V, g->ncols, CFPQ_MAX_DIM))
+-        {
+-            // the compact product would exceed the dimension limit; fall back.
+-            // Keep the member-id range reserved: a discarded family may have
+-            // populated the support hash, so ids must never be reused.
+-            for (size_t m = 0; m < g->ntrans; ++m)
+-                assigned[g->member_tr[m]] = false;
+-            next_base += (GrB_Index)g->ntrans;
+-            s_group_free(g);
+-            continue;
+-        }
+-        next_base += (GrB_Index)g->ntrans;
+-    }
+-
+-    // dual-family members grouped by source state, for one shared M scan
+-    {
+-        GrB_Index nd = 0;
+-        for (size_t gi = 0; gi < gs->ngroups; ++gi)
+-            if (gs->groups[gi].dual)
+-                nd += (GrB_Index)gs->groups[gi].ntrans;
+-        gs->ndual = nd;
+-        if (nd > 0)
+-        {
+-            if (nd > (GrB_Index)(SIZE_MAX / sizeof(GrB_Index)))
+-            {
+-                info = GrB_OUT_OF_MEMORY;
+-                goto cleanup;
+-            }
+-            S_CALLOC(gs->dual_off, (size_t)Q + 1, sizeof(GrB_Index));
+-            S_ALLOC(gs->dual_group, nd, sizeof(GrB_Index));
+-            S_ALLOC(gs->dual_local, nd, sizeof(GrB_Index));
+-            for (size_t gi = 0; gi < gs->ngroups; ++gi)
+-            {
+-                S_Group *g = &gs->groups[gi];
+-                if (!g->dual)
+-                    continue;
+-                for (size_t m = 0; m < g->ntrans; ++m)
+-                    gs->dual_off[g->from[m] + 1]++;
+-            }
+-            for (GrB_Index q = 0; q < Q; ++q)
+-                gs->dual_off[q + 1] += gs->dual_off[q];
+-            memcpy(cursor, gs->dual_off, ((size_t)Q + 1) * sizeof(GrB_Index));
+-            for (size_t gi = 0; gi < gs->ngroups; ++gi)
+-            {
+-                S_Group *g = &gs->groups[gi];
+-                if (!g->dual)
+-                    continue;
+-                for (size_t m = 0; m < g->ntrans; ++m)
+-                {
+-                    GrB_Index pos = cursor[g->from[m]]++;
+-                    gs->dual_group[pos] = (GrB_Index)gi;
+-                    gs->dual_local[pos] = (GrB_Index)m;
+-                }
+-            }
+-        }
++        g->ncols = (GrB_Index)g->ntrans * V;
++        info = s_group_build_blocks(g, V, graph_term, msg);
++        if (info != GrB_SUCCESS)
++            goto cleanup;
+     }
+ 
+ build_ordinary:
+@@ -958,181 +677,9 @@
+     S_FREE(cands);
+     S_FREE(assigned);
+     s_tuples_free(&ttup);
+-    s_tuples_free(&htup);
+     return info;
+ }
+ 
+-// C |= delta with the same first-contribution handle swap as s_mul_acc.
+-static GrB_Info s_acc_merge(GrB_Matrix *C, GrB_Matrix *delta, bool *acc_empty)
+-{
+-    GrB_Index n = 0;
+-    H_TRY(GrB_Matrix_nvals(&n, *delta));
+-    if (n == 0)
+-        return GrB_SUCCESS;
+-
+-    if (*acc_empty)
+-    {
+-        GrB_Matrix swap = *C;
+-        *C = *delta;
+-        *delta = swap;
+-        *acc_empty = false;
+-    }
+-    else
+-    {
+-        H_TRY(GrB_eWiseAdd(*C, GrB_NULL, GrB_NULL, GrB_LOR, *C, *delta, GrB_NULL));
+-    }
+-
+-    H_TRY(GrB_Matrix_clear(*delta));
+-    return GrB_SUCCESS;
+-}
+-
+-// Scatter one forward family: Y = F * H, with column c encoding (member, w).
+-static GrB_Info s_group_forward(S_Group *g, GrB_Index V, GrB_Matrix M, GrB_Matrix fscratch,
+-                                GrB_Matrix *gbuild, S_TupleBuf *tup, GrB_Matrix *acc,
+-                                bool *acc_empty, char *msg)
+-{
+-    GrB_Index row = g->anchor;
+-    H_TRY(GxB_Matrix_reshape(fscratch, false, 1, V * V, GrB_NULL));
+-    H_TRY(GrB_Matrix_extract(fscratch, GrB_NULL, GrB_NULL, M, &row, 1, GrB_ALL, V * V,
+-                             GrB_NULL));
+-    H_TRY(GxB_Matrix_reshape(fscratch, false, V, V, GrB_NULL));
+-    H_TRY(GrB_mxm(g->tmp, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL, fscratch, g->inc, GrB_NULL));
+-
+-    GrB_Index n = 0;
+-    H_TRY(GrB_Matrix_nvals(&n, g->tmp));
+-    if (n == 0)
+-        return GrB_SUCCESS;
+-    H_TRY(s_tuples_reserve(tup, n, msg));
+-    H_TRY(GrB_Matrix_extractTuples_BOOL(tup->i, tup->j, tup->x, &n, g->tmp));
+-
+-    for (GrB_Index k = 0; k < n; ++k)
+-    {
+-        GrB_Index c = tup->j[k];
+-        GrB_Index m = g->col_member[c];
+-        tup->i[k] = g->to[m] * V + tup->i[k];
+-        tup->j[k] = g->col_vertex[c];
+-        tup->x[k] = true;
+-    }
+-
+-    H_TRY(GrB_Matrix_clear(*gbuild));
+-    H_TRY(GrB_Matrix_build_BOOL(*gbuild, tup->i, tup->j, tup->x, n, GrB_LOR));
+-    return s_acc_merge(acc, gbuild, acc_empty);
+-}
+-
+-// Scatter one dual family: Y = F_in * J, where every row returns to `anchor`.
+-static GrB_Info s_group_dual(S_Group *g, GrB_Index V, GrB_Matrix dprod, GrB_Matrix *gbuild,
+-                             S_TupleBuf *tup, GrB_Matrix *acc, bool *acc_empty, char *msg)
+-{
+-    if (g->fi_n == 0)
+-        return GrB_SUCCESS;
+-
+-    H_TRY(GrB_Matrix_clear(g->tmp));
+-    H_TRY(GrB_Matrix_build_BOOL(g->tmp, g->fi_u, g->fi_c, g->fi_x, g->fi_n, GrB_LOR));
+-    H_TRY(GrB_mxm(dprod, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL, g->tmp, g->inc, GrB_NULL));
+-
+-    GrB_Index n = 0;
+-    H_TRY(GrB_Matrix_nvals(&n, dprod));
+-    if (n == 0)
+-        return GrB_SUCCESS;
+-    H_TRY(s_tuples_reserve(tup, n, msg));
+-    H_TRY(GrB_Matrix_extractTuples_BOOL(tup->i, tup->j, tup->x, &n, dprod));
+-
+-    for (GrB_Index k = 0; k < n; ++k)
+-    {
+-        tup->i[k] = g->anchor * V + tup->i[k];
+-        tup->x[k] = true;
+-    }
+-
+-    H_TRY(GrB_Matrix_clear(*gbuild));
+-    H_TRY(GrB_Matrix_build_BOOL(*gbuild, tup->i, tup->j, tup->x, n, GrB_LOR));
+-    return s_acc_merge(acc, gbuild, acc_empty);
+-}
+-
+-// Apply all grouped terminal contributions for one sweep.
+-static GrB_Info s_apply_groups(S_GroupSet *gs, GrB_Index V, GrB_Matrix M, const bool *active,
+-                               GrB_Matrix fscratch, GrB_Matrix dprod, GrB_Matrix *gbuild,
+-                               S_TupleBuf *tup, S_TupleBuf *mtup, GrB_Matrix *acc,
+-                               bool *acc_empty, char *msg)
+-{
+-    bool any_dual = false;
+-    for (size_t gi = 0; gi < gs->ngroups; ++gi)
+-    {
+-        S_Group *g = &gs->groups[gi];
+-        if (g->ntrans == 0)
+-            continue;
+-        g->live = false;
+-        if (!g->dual)
+-        {
+-            g->live = active[g->anchor];
+-        }
+-        else
+-        {
+-            for (size_t m = 0; m < g->ntrans; ++m)
+-                if (active[g->from[m]])
+-                {
+-                    g->live = true;
+-                    break;
+-                }
+-        }
+-        if (g->dual && g->live)
+-            any_dual = true;
+-    }
+-
+-    for (size_t gi = 0; gi < gs->ngroups; ++gi)
+-    {
+-        S_Group *g = &gs->groups[gi];
+-        if (g->ntrans == 0 || g->dual || !g->live)
+-            continue;
+-        H_TRY(s_group_forward(g, V, M, fscratch, gbuild, tup, acc, acc_empty, msg));
+-    }
+-
+-    if (!any_dual)
+-        return GrB_SUCCESS;
+-
+-    GrB_Index mn = 0;
+-    H_TRY(GrB_Matrix_nvals(&mn, M));
+-    if (mn == 0)
+-        return GrB_SUCCESS;
+-    H_TRY(s_tuples_reserve(mtup, mn, msg));
+-    H_TRY(GrB_Matrix_extractTuples_BOOL(mtup->i, mtup->j, mtup->x, &mn, M));
+-
+-    for (size_t gi = 0; gi < gs->ngroups; ++gi)
+-        if (gs->groups[gi].dual)
+-            gs->groups[gi].fi_n = 0;
+-
+-    for (GrB_Index k = 0; k < mn; ++k)
+-    {
+-        GrB_Index q = mtup->i[k];
+-        GrB_Index lo = gs->dual_off[q];
+-        GrB_Index hi = gs->dual_off[q + 1];
+-        if (lo == hi)
+-            continue;
+-        GrB_Index flat = mtup->j[k];
+-        GrB_Index u = flat / V;
+-        GrB_Index v = flat % V;
+-        for (GrB_Index p = lo; p < hi; ++p)
+-        {
+-            S_Group *g = &gs->groups[gs->dual_group[p]];
+-            if (!g->live)
+-                continue;
+-            GrB_Index col = 0;
+-            uint64_t gm = (uint64_t)(g->member_base + gs->dual_local[p]);
+-            if (!s_hash_lookup(&gs->hash, gm, (uint64_t)v, &col))
+-                continue;
+-            H_TRY(s_group_fi_append(g, u, col, msg));
+-        }
+-    }
+-
+-    for (size_t gi = 0; gi < gs->ngroups; ++gi)
+-    {
+-        S_Group *g = &gs->groups[gi];
+-        if (g->ntrans == 0 || !g->dual || !g->live)
+-            continue;
+-        H_TRY(s_group_dual(g, V, dprod, gbuild, tup, acc, acc_empty, msg));
+-    }
+-
+-    return GrB_SUCCESS;
+-}
+ 
+ #undef H_TRY
+ 
+@@ -1170,15 +717,7 @@
+     // grouped terminal-transfer state and scratch
+     S_GroupSet groupset;
+     memset(&groupset, 0, sizeof(groupset));
+-    S_TupleBuf gtup;
+-    S_TupleBuf atup;
+-    S_TupleBuf mtup;
+-    memset(&gtup, 0, sizeof(gtup));
+-    memset(&atup, 0, sizeof(atup));
+-    memset(&mtup, 0, sizeof(mtup));
+     GrB_Matrix fscratch = GrB_NULL; // V x V row extraction / forward operand
+-    GrB_Matrix dprod = GrB_NULL;    // V x V dual-family product
+-    GrB_Matrix gbuild = GrB_NULL;   // QV x V grouped scatter target
+ 
+     // reusable call-tuple buffers for the direct flat-layout M_call build
+     GrB_Index *call_i = NULL;
+@@ -1314,8 +853,7 @@
+             term_active[i] = true;
+         }
+ 
+-        LG_TRY(s_build_groups(&groupset, Q, V, num_term, rsm_term, graph_term, term_active,
+-                              &gtup, msg));
++        LG_TRY(s_build_groups(&groupset, Q, V, num_term, rsm_term, graph_term, term_active, msg));
+     }
+ 
+     //--------------------------------------------------------------------------
+@@ -1355,8 +893,6 @@
+     if (have_group)
+     {
+         GRB_TRY(GrB_Matrix_new(&fscratch, GrB_BOOL, V, V));
+-        GRB_TRY(GrB_Matrix_new(&dprod, GrB_BOOL, V, V));
+-        GRB_TRY(GrB_Matrix_new(&gbuild, GrB_BOOL, Q * V, V));
+     }
+ 
+     GRB_TRY(GrB_Vector_new(&rowvec, GrB_BOOL, Q));
+@@ -1390,8 +926,7 @@
+         // state of A_i is an active row of M, so whole chains can be skipped.
+         if (have_group)
+         {
+-            LG_TRY(s_apply_groups(&groupset, V, M, active, fscratch, dprod, &gbuild, &atup, &mtup,
+-                                  &acc, &acc_empty, msg));
++            LG_TRY(s_apply_groups(&groupset, V, M, active, fscratch, acc, &acc_empty, msg));
+         }
+ 
+         for (size_t i = 0; i < num_term; ++i)

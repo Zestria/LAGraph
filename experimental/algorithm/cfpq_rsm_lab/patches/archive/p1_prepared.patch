@@ -1,0 +1,431 @@
+--- a/experimental/algorithm/LAGraph_CFPQ_RSM.c
++++ b/experimental/algorithm/LAGraph_CFPQ_RSM.c
+@@ -31,9 +31,7 @@
+         GrB_free(&fscratch);                                                                       \
+         GrB_free(&dprod);                                                                          \
+         GrB_free(&gbuild);                                                                         \
+-        LAGraph_Free((void **)&term_active, NULL);                                                 \
+-        s_groupset_free(&groupset, num_term);                                                      \
+-        s_tuples_free(&gtup);                                                                      \
++        s_group_work_free(&groupset);                                                             \
+         s_tuples_free(&atup);                                                                      \
+         s_tuples_free(&mtup);                                                                      \
+         LAGraph_Free((void **)&active, NULL);                                                      \
+@@ -57,6 +55,7 @@
+     }
+ 
+ #include "LAGraph.h"
++#include "LAGraph_CFPQ_RSM_prepared.h"
+ #include "LG_internal.h"
+ #include <GraphBLAS.h>
+ 
+@@ -583,7 +582,6 @@
+ 
+     H_TRY(GrB_Matrix_new(&g->inc, GrB_BOOL, V, g->ncols));
+     H_TRY(GrB_Matrix_build_BOOL(g->inc, htup->i, htup->j, htup->x, h_n, GrB_LOR));
+-    H_TRY(GrB_Matrix_new(&g->tmp, GrB_BOOL, V, g->ncols));
+     return GrB_SUCCESS;
+ }
+ 
+@@ -631,7 +629,6 @@
+ 
+     H_TRY(GrB_Matrix_new(&g->inc, GrB_BOOL, g->ncols, V));
+     H_TRY(GrB_Matrix_build_BOOL(g->inc, htup->i, htup->j, htup->x, h_n, GrB_LOR));
+-    H_TRY(GrB_Matrix_new(&g->tmp, GrB_BOOL, V, g->ncols));
+     return GrB_SUCCESS;
+ }
+ 
+@@ -1134,22 +1131,201 @@
+     return GrB_SUCCESS;
+ }
+ 
++// Static prepared data owns only immutable family support. Runtime fields in
++// its S_Group entries (tmp/live/fi_*) stay zero; Execute uses private copies.
++struct LAGraph_CFPQ_RSM_Plan
++{
++    RSM rsm;                       // shallow copy; inputs are borrowed
++    const GrB_Matrix *graph_term;
++    GrB_Index V;
++    S_GroupSet groupset;
++};
++
++static void s_group_work_free(S_GroupSet *gs)
++{
++    if (gs->groups == NULL) return;
++    for (size_t k = 0; k < gs->ngroups; ++k)
++    {
++        S_Group *g = &gs->groups[k];
++        GrB_free(&g->tmp);
++        LAGraph_Free((void **)&g->fi_u, NULL);
++        LAGraph_Free((void **)&g->fi_c, NULL);
++        LAGraph_Free((void **)&g->fi_x, NULL);
++    }
++    LAGraph_Free((void **)&gs->groups, NULL);
++}
++
++#define V_REQUIRE(condition, code, text) \
++    do { if (!(condition)) { if (msg != NULL) snprintf(msg, LAGRAPH_MSG_LEN, "%s", text); return code; } } while (0)
++
++static int s_validate_rsm(const RSM *rsm, const GrB_Matrix *graph_term,
++                           GrB_Index V, char *msg)
++{
++    V_REQUIRE(rsm != NULL, GrB_NULL_POINTER, "RSM is NULL");
++    GrB_Index Q = rsm->state_count;
++    GrB_Index num_term = rsm->terminal_count;
++    GrB_Index num_nonterm = rsm->nonterminal_count;
++    GrB_Index start_nonterm = rsm->start_nonterminal;
++    GrB_Matrix *rsm_term = rsm->terminal_matrices;
++    GrB_Matrix *rsm_nonterm = rsm->nonterminal_matrices;
++    GrB_Index *start_states = rsm->start_states;
++    GrB_Vector *final_states = rsm->final_states;
++    V_REQUIRE(rsm_term != NULL || num_term == 0, GrB_NULL_POINTER, "invalid RSM input");
++    V_REQUIRE(rsm_nonterm != NULL, GrB_NULL_POINTER, "invalid RSM input");
++    V_REQUIRE(start_states != NULL, GrB_NULL_POINTER, "invalid RSM input");
++    V_REQUIRE(final_states != NULL, GrB_NULL_POINTER, "invalid RSM input");
++    V_REQUIRE(graph_term != NULL || num_term == 0, GrB_NULL_POINTER, "invalid RSM input");
++    V_REQUIRE(start_nonterm < num_nonterm, GrB_INVALID_VALUE, "invalid RSM input");
++
++    //--------------------------------------------------------------------------
++    // dimension, index, and overflow validation (before any allocation)
++    //--------------------------------------------------------------------------
++
++    V_REQUIRE(!s_mul_exceeds(V, V, CFPQ_MAX_DIM), GrB_INVALID_VALUE,
++                  "V*V exceeds the GraphBLAS dimension limit");
++    V_REQUIRE(!s_mul_exceeds(Q, V, CFPQ_MAX_DIM), GrB_INVALID_VALUE,
++                  "Q*V exceeds the GraphBLAS dimension limit");
++
++    // start states are written into a Q x 1 matrix; validate every entry the
++    // kernel actually reads (all called boxes plus the start box).
++    V_REQUIRE(start_states[start_nonterm] < Q, GrB_INVALID_INDEX,
++                  "start state of the start box out of range");
++    // The valid start state also guarantees Q > 0 for all subsequent work.
++    for (size_t i = 0; i < num_nonterm; ++i)
++    {
++        if (rsm_nonterm[i] != GrB_NULL)
++        {
++            V_REQUIRE(start_states[i] < Q, GrB_INVALID_INDEX,
++                          "start state of a called box out of range");
++        }
++    }
++
++    //--------------------------------------------------------------------------
++    // input matrix and final-vector shape validation (metadata only)
++    //--------------------------------------------------------------------------
++ 
++    for (size_t i = 0; i < num_term; ++i)
++    {
++        if (rsm_term[i] != GrB_NULL)
++        {
++            GrB_Index nr = 0, nc = 0;
++            H_TRY(GrB_Matrix_nrows(&nr, rsm_term[i]));
++            H_TRY(GrB_Matrix_ncols(&nc, rsm_term[i]));
++            V_REQUIRE(nr == Q && nc == Q, GrB_DIMENSION_MISMATCH,
++                          "terminal transition matrix is not Q x Q");
++        }
++        if (graph_term[i] != GrB_NULL)
++        {
++            GrB_Index nr = 0, nc = 0;
++            H_TRY(GrB_Matrix_nrows(&nr, graph_term[i]));
++            H_TRY(GrB_Matrix_ncols(&nc, graph_term[i]));
++            V_REQUIRE(nr == V && nc == V, GrB_DIMENSION_MISMATCH,
++                          "graph matrix is not V x V");
++        }
++    }
++    for (size_t i = 0; i < num_nonterm; ++i)
++    {
++        if (rsm_nonterm[i] != GrB_NULL)
++        {
++            GrB_Index nr = 0, nc = 0;
++            H_TRY(GrB_Matrix_nrows(&nr, rsm_nonterm[i]));
++            H_TRY(GrB_Matrix_ncols(&nc, rsm_nonterm[i]));
++            V_REQUIRE(nr == Q && nc == Q, GrB_DIMENSION_MISMATCH,
++                          "nonterminal transition matrix is not Q x Q");
++        }
++        if (final_states[i] != GrB_NULL)
++        {
++            GrB_Index n = 0;
++            H_TRY(GrB_Vector_size(&n, final_states[i]));
++            V_REQUIRE(n == Q, GrB_DIMENSION_MISMATCH, "final vector length is not Q");
++        }
++    }
++
++    return GrB_SUCCESS;
++}
++
++static int s_validate_sources(const GrB_Index *sources, size_t n, GrB_Index V, char *msg)
++{
++    V_REQUIRE(sources != NULL || n == 0, GrB_NULL_POINTER, "sources are NULL");
++    V_REQUIRE(n <= V, GrB_INVALID_VALUE, "source count exceeds V");
++    for (size_t k = 0; k < n; ++k)
++        V_REQUIRE(sources[k] < V, GrB_INVALID_INDEX, "source vertex out of range");
++    return GrB_SUCCESS;
++}
++#undef V_REQUIRE
++
++void LAGraph_CFPQ_RSM_FreePrepared(LAGraph_CFPQ_RSM_Plan **prepared)
++{
++    if (prepared == NULL || *prepared == NULL) return;
++    s_groupset_free(&(*prepared)->groupset, (*prepared)->rsm.terminal_count);
++    LAGraph_Free((void **)prepared, NULL);
++}
++
++int LAGraph_CFPQ_RSM_Prepare(LAGraph_CFPQ_RSM_Plan **prepared, const RSM *rsm,
++                            const GrB_Matrix *graph_term, GrB_Index V, char *msg)
++{
++    LG_CLEAR_MSG;
++    if (prepared == NULL) return GrB_NULL_POINTER;
++    *prepared = NULL;
++    int info = s_validate_rsm(rsm, graph_term, V, msg);
++    if (info != GrB_SUCCESS) return info;
++    LAGraph_CFPQ_RSM_Plan *plan = NULL;
++    bool *term_active = NULL;
++    S_TupleBuf gtup = {0};
++#define P_TRY(method) do { info = (method); if (info != GrB_SUCCESS) goto cleanup; } while (0)
++    P_TRY(LAGraph_Calloc((void **)&plan, 1, sizeof(*plan), msg));
++    plan->rsm = *rsm;
++    plan->graph_term = graph_term;
++    plan->V = V;
++    GrB_Index num_term = rsm->terminal_count;
++    if (num_term > 0)
++    {
++        P_TRY(LAGraph_Calloc((void **)&term_active, num_term, sizeof(bool), msg));
++        for (GrB_Index t = 0; t < num_term; ++t)
++        {
++            if (rsm->terminal_matrices[t] == GrB_NULL || graph_term[t] == GrB_NULL) continue;
++            GrB_Index rn = 0, gn = 0;
++            P_TRY(GrB_Matrix_nvals(&rn, rsm->terminal_matrices[t]));
++            P_TRY(GrB_Matrix_nvals(&gn, graph_term[t]));
++            term_active[t] = rn > 0 && gn > 0;
++        }
++        P_TRY(s_build_groups(&plan->groupset, rsm->state_count, V, num_term,
++                             rsm->terminal_matrices, graph_term, term_active, &gtup, msg));
++    }
++    // Finish pending input/build work here, before a prepared execution timer.
++    for (GrB_Index t = 0; t < num_term; ++t)
++    {
++        if (rsm->terminal_matrices[t] != GrB_NULL)
++            P_TRY(GrB_Matrix_wait(rsm->terminal_matrices[t], GrB_MATERIALIZE));
++        if (graph_term[t] != GrB_NULL)
++            P_TRY(GrB_Matrix_wait(graph_term[t], GrB_MATERIALIZE));
++        if (plan->groupset.ord_term != NULL && plan->groupset.ord_term[t] != GrB_NULL)
++            P_TRY(GrB_Matrix_wait(plan->groupset.ord_term[t], GrB_MATERIALIZE));
++    }
++    for (GrB_Index a = 0; a < rsm->nonterminal_count; ++a)
++    {
++        if (rsm->nonterminal_matrices[a] != GrB_NULL)
++            P_TRY(GrB_Matrix_wait(rsm->nonterminal_matrices[a], GrB_MATERIALIZE));
++        if (rsm->final_states[a] != GrB_NULL)
++            P_TRY(GrB_Vector_wait(rsm->final_states[a], GrB_MATERIALIZE));
++    }
++    for (size_t k = 0; k < plan->groupset.ngroups; ++k)
++        if (plan->groupset.groups[k].inc != GrB_NULL)
++            P_TRY(GrB_Matrix_wait(plan->groupset.groups[k].inc, GrB_MATERIALIZE));
++    *prepared = plan;
++    plan = NULL;
++cleanup:
++    s_tuples_free(&gtup);
++    LAGraph_Free((void **)&term_active, NULL);
++    LAGraph_CFPQ_RSM_FreePrepared(&plan);
++#undef P_TRY
++    return info;
++}
++
+ #undef H_TRY
+ 
+-typedef struct
+-{
+-    GrB_Index state_count;            // Q
+-    GrB_Index terminal_count;
+-    GrB_Index nonterminal_count;
+-    GrB_Index start_nonterminal;
+-    GrB_Matrix *terminal_matrices;    // [t]: Q x Q transitions labeled t, or NULL if none
+-    GrB_Matrix *nonterminal_matrices; // [i]: Q x Q transitions labeled i, or NULL if none
+-    GrB_Index *start_states;          // [i]: start state of the box of nonterminal i
+-    GrB_Vector *final_states;         // [i]: length-Q indicator of the final states of box i
+-} RSM;
+-
+-int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *graph_term,
+-                     const GrB_Index *sources, size_t num_sources, GrB_Index V, char *msg)
++int LAGraph_CFPQ_RSM_Execute(GrB_Vector *reachable, const LAGraph_CFPQ_RSM_Plan *prepared,
++                            const GrB_Index *sources, size_t num_sources, char *msg)
+ {
+     LG_CLEAR_MSG;
+ 
+@@ -1170,10 +1346,8 @@
+     // grouped terminal-transfer state and scratch
+     S_GroupSet groupset;
+     memset(&groupset, 0, sizeof(groupset));
+-    S_TupleBuf gtup;
+     S_TupleBuf atup;
+     S_TupleBuf mtup;
+-    memset(&gtup, 0, sizeof(gtup));
+     memset(&atup, 0, sizeof(atup));
+     memset(&mtup, 0, sizeof(mtup));
+     GrB_Matrix fscratch = GrB_NULL; // V x V row extraction / forward operand
+@@ -1194,128 +1368,34 @@
+     GrB_Index num_term = 0;
+     GrB_Index num_nonterm = 0;
+ 
+-    bool *term_active = NULL;
+     bool *active = NULL;
+     GrB_Index *active_idx = NULL;
+ 
+     LG_ASSERT(reachable != NULL, GrB_NULL_POINTER);
+     *reachable = GrB_NULL;
+-    LG_ASSERT(rsm != NULL, GrB_NULL_POINTER);
+-
+-    // shortcuts
++    LG_ASSERT(prepared != NULL, GrB_NULL_POINTER);
++    const RSM *rsm = &prepared->rsm;
++    const GrB_Matrix *graph_term = prepared->graph_term;
++    GrB_Index V = prepared->V;
+     GrB_Index Q = rsm->state_count;
+     num_term = rsm->terminal_count;
+     num_nonterm = rsm->nonterminal_count;
+     GrB_Index start_nonterm = rsm->start_nonterminal;
+-    GrB_Matrix *rsm_term = rsm->terminal_matrices;
+     GrB_Matrix *rsm_nonterm = rsm->nonterminal_matrices;
+     GrB_Index *start_states = rsm->start_states;
+     GrB_Vector *final_states = rsm->final_states;
+-
+-    LG_ASSERT(rsm_term != NULL || num_term == 0, GrB_NULL_POINTER);
+-    LG_ASSERT(rsm_nonterm != NULL, GrB_NULL_POINTER);
+-    LG_ASSERT(start_states != NULL, GrB_NULL_POINTER);
+-    LG_ASSERT(final_states != NULL, GrB_NULL_POINTER);
+-    LG_ASSERT(graph_term != NULL || num_term == 0, GrB_NULL_POINTER);
+-    LG_ASSERT(sources != NULL || num_sources == 0, GrB_NULL_POINTER);
+-    LG_ASSERT(start_nonterm < num_nonterm, GrB_INVALID_VALUE);
+-    LG_ASSERT(num_sources <= V, GrB_INVALID_VALUE);
+-
+-    //--------------------------------------------------------------------------
+-    // dimension, index, and overflow validation (before any allocation)
+-    //--------------------------------------------------------------------------
+-
+-    LG_ASSERT_MSG(!s_mul_exceeds(V, V, CFPQ_MAX_DIM), GrB_INVALID_VALUE,
+-                  "V*V exceeds the GraphBLAS dimension limit");
+-    LG_ASSERT_MSG(!s_mul_exceeds(Q, V, CFPQ_MAX_DIM), GrB_INVALID_VALUE,
+-                  "Q*V exceeds the GraphBLAS dimension limit");
+-
+-    // sources are flattened as s*V+s, so they must be validated before that
+-    // product is formed; an out-of-range source would otherwise wrap.
+-    for (size_t i = 0; i < num_sources; ++i)
+-    {
+-        LG_ASSERT_MSG(sources[i] < V, GrB_INVALID_INDEX, "source vertex out of range");
+-    }
+-
+-    // start states are written into a Q x 1 matrix; validate every entry the
+-    // kernel actually reads (all called boxes plus the start box).
+-    LG_ASSERT_MSG(start_states[start_nonterm] < Q, GrB_INVALID_INDEX,
+-                  "start state of the start box out of range");
+-    // The valid start state also guarantees Q > 0 for all subsequent work.
+-    for (size_t i = 0; i < num_nonterm; ++i)
+-    {
+-        if (rsm_nonterm[i] != GrB_NULL)
+-        {
+-            LG_ASSERT_MSG(start_states[i] < Q, GrB_INVALID_INDEX,
+-                          "start state of a called box out of range");
+-        }
+-    }
+-
+-    //--------------------------------------------------------------------------
+-    // input matrix and final-vector shape validation (metadata only)
+-    //--------------------------------------------------------------------------
+- 
+-    for (size_t i = 0; i < num_term; ++i)
+-    {
+-        if (rsm_term[i] != GrB_NULL)
+-        {
+-            GrB_Index nr = 0, nc = 0;
+-            GRB_TRY(GrB_Matrix_nrows(&nr, rsm_term[i]));
+-            GRB_TRY(GrB_Matrix_ncols(&nc, rsm_term[i]));
+-            LG_ASSERT_MSG(nr == Q && nc == Q, GrB_DIMENSION_MISMATCH,
+-                          "terminal transition matrix is not Q x Q");
+-        }
+-        if (graph_term[i] != GrB_NULL)
+-        {
+-            GrB_Index nr = 0, nc = 0;
+-            GRB_TRY(GrB_Matrix_nrows(&nr, graph_term[i]));
+-            GRB_TRY(GrB_Matrix_ncols(&nc, graph_term[i]));
+-            LG_ASSERT_MSG(nr == V && nc == V, GrB_DIMENSION_MISMATCH,
+-                          "graph matrix is not V x V");
+-        }
+-    }
+-    for (size_t i = 0; i < num_nonterm; ++i)
+-    {
+-        if (rsm_nonterm[i] != GrB_NULL)
+-        {
+-            GrB_Index nr = 0, nc = 0;
+-            GRB_TRY(GrB_Matrix_nrows(&nr, rsm_nonterm[i]));
+-            GRB_TRY(GrB_Matrix_ncols(&nc, rsm_nonterm[i]));
+-            LG_ASSERT_MSG(nr == Q && nc == Q, GrB_DIMENSION_MISMATCH,
+-                          "nonterminal transition matrix is not Q x Q");
+-        }
+-        if (final_states[i] != GrB_NULL)
+-        {
+-            GrB_Index n = 0;
+-            GRB_TRY(GrB_Vector_size(&n, final_states[i]));
+-            LG_ASSERT_MSG(n == Q, GrB_DIMENSION_MISMATCH, "final vector length is not Q");
+-        }
+-    }
+-
+-    //--------------------------------------------------------------------------
+-    // terminal preprocessing, family discovery, and immutable group maps
+-    //--------------------------------------------------------------------------
+-
+-    if (num_term > 0)
+-    {
+-        LG_TRY(LAGraph_Calloc((void **) &term_active, num_term, sizeof(bool), msg));
+-
+-        for (size_t i = 0; i < num_term; ++i)
+-        {
+-            if (rsm_term[i] == GrB_NULL || graph_term[i] == GrB_NULL)
+-                continue;
+-
+-            GrB_Index rn = 0, gn = 0;
+-            GRB_TRY(GrB_Matrix_nvals(&rn, rsm_term[i]));
+-            GRB_TRY(GrB_Matrix_nvals(&gn, graph_term[i]));
+-            if (rn == 0 || gn == 0)
+-                continue;
+-
+-            term_active[i] = true;
+-        }
+-
+-        LG_TRY(s_build_groups(&groupset, Q, V, num_term, rsm_term, graph_term, term_active,
+-                              &gtup, msg));
++    LG_TRY(s_validate_sources(sources, num_sources, V, msg));
++
++    // Borrow immutable support, but own all per-query mutable group state.
++    groupset = prepared->groupset;
++    groupset.groups = NULL;
++    if (groupset.ngroups > 0)
++    {
++        LG_TRY(LAGraph_Malloc((void **)&groupset.groups, groupset.ngroups, sizeof(S_Group), msg));
++        memcpy(groupset.groups, prepared->groupset.groups, groupset.ngroups * sizeof(S_Group));
++        for (size_t k = 0; k < groupset.ngroups; ++k)
++            if (groupset.groups[k].ntrans > 0)
++                GRB_TRY(GrB_Matrix_new(&groupset.groups[k].tmp, GrB_BOOL, V, groupset.groups[k].ncols));
+     }
+ 
+     //--------------------------------------------------------------------------
+@@ -1558,3 +1638,21 @@
+     LG_FREE_WORK;
+     return GrB_SUCCESS;
+ }
++
++// Compatibility entry point: unchanged one-shot semantics for existing callers.
++int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *graph_term,
++                     const GrB_Index *sources, size_t num_sources, GrB_Index V, char *msg)
++{
++    LG_CLEAR_MSG;
++    if (reachable == NULL) return GrB_NULL_POINTER;
++    *reachable = GrB_NULL;
++    if (rsm == NULL) return GrB_NULL_POINTER;
++    int info = s_validate_sources(sources, num_sources, V, msg);
++    if (info != GrB_SUCCESS) return info;
++    LAGraph_CFPQ_RSM_Plan *prepared = NULL;
++    info = LAGraph_CFPQ_RSM_Prepare(&prepared, rsm, graph_term, V, msg);
++    if (info == GrB_SUCCESS)
++        info = LAGraph_CFPQ_RSM_Execute(reachable, prepared, sources, num_sources, msg);
++    LAGraph_CFPQ_RSM_FreePrepared(&prepared);
++    return info;
++}

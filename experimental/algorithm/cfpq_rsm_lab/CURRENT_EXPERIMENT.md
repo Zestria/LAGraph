@@ -2,23 +2,20 @@
 
 > Generated from execution receipts by `make status`; do not edit validation claims by hand.
 
-Campaign: `cfpq-reviewed-inherited-openmp-validation-2026-11-07`. State: **VALIDATED_FOR_CORRECTNESS_AND_TINY_PROFILING**.
+Campaign: `cfpq-p1-full-active-validation-2026-11-17`. State: **VALIDATED_FOR_CORRECTNESS_AND_TINY_PROFILING**.
 
-Latest recorded attempt: `2026-11-07T21:44:29.559578+03:00` (Europe/Moscow).
+Latest recorded attempt: `2026-11-18T12:36:35.275200+03:00` (Europe/Moscow).
 
-Reviewed standalone P1-P4 with inherited OpenMP threading. Only bounded validation is recorded; no full-recipe performance receipt exists. Production identity is checked against the agreed baseline.
+Baseline and P1 full-coordinate validation with inherited OpenMP threading. Only bounded validation is recorded; no full-recipe performance receipt exists. Production identity is checked against the agreed baseline.
 
-Registry: 86 snapshots / 85 distinct source hashes. [Machine evidence](VALIDATION.json), [campaign definition](CURRENT_CAMPAIGN.json), [registry](variants/REGISTRY.md), [backup](BACKUP.md).
+Registry: 90 snapshots / 89 distinct source hashes. [Machine evidence](VALIDATION.json), [campaign definition](CURRENT_CAMPAIGN.json), [registry](variants/REGISTRY.md), [backup](BACKUP.md).
 
 | Variant | Source SHA-256 (prefix) | Oracle + existing | Loaded smoke | Reduced data | Tiny profile | Full performance |
 | --- | --- | --- | --- | --- | --- | --- |
 | baseline | `c7efb94f21bb` | PASS | PASS | PASS | PASS | NOT MEASURED |
-| p1_review | `1c5ad06ef855` | PASS | PASS | PASS | PASS | NOT MEASURED |
-| p2_review | `dc0f7c50405b` | PASS | PASS | PASS | PASS | NOT MEASURED |
-| p3_review | `35109ff0c008` | PASS | PASS | PASS | PASS | NOT MEASURED |
-| p4_review | `7eefac364098` | PASS | PASS | PASS | PASS | NOT MEASURED |
+| p1_full | `0f85bb5f1dc6` | PASS | PASS | PASS | PASS | NOT MEASURED |
 
-Tooling tests: **PASS** (64 tests).
+Tooling tests: **PASS** (75 tests).
 
 PASS means the latest matching attempt has exit 0, unchanged source/tool identities and artifacts, and passes result-completeness checks. A later failure or timeout supersedes an earlier pass; changed/missing evidence becomes STALE. Old logs without receipts are retained but cannot establish a current PASS.
 
@@ -46,9 +43,10 @@ make status-check
 make list
 make verify
 make tooling-tests
-make correctness VARIANT=all
-make profile VARIANT=p4_review
-make compare RECIPE=full SIZES=100 VARIANTS=baseline,p1_review,p2_review,p3_review,p4_review DRY_RUN=1
+make correctness VARIANT=baseline
+make correctness VARIANT=p1_full
+make profile VARIANT=p1_full
+make compare RECIPE=full SIZES=100 VARIANTS=baseline,p1_full DRY_RUN=1
 ```
 
 The final command only prints the expensive full recipe. Removing DRY_RUN deliberately starts performance work; it is not part of the current validation.
@@ -57,30 +55,18 @@ Evidence selected for each check:
 
 | Variant/check | Latest receipt | Result |
 | --- | --- | --- |
-| baseline/oracle_existing | [receipt](runs/2026-11-07_21-44-02-475335_openmp-final-baseline/oracle-existing.result.json) | PASS: receipt and artifacts verified |
-| baseline/timing_smoke | [receipt](runs/2026-11-07_21-42-12-515468_openmp-correctness-p4_review/loaded-smoke.result.json) | PASS: receipt and artifacts verified |
-| baseline/reduced | [receipt](runs/2026-11-07_21-39-58-991878_openmp-correctness-baseline/reduced15.result.json) | PASS: receipt and artifacts verified |
-| baseline/profile_smoke | [receipt](runs/2026-11-07_21-42-47-507946_openmp-profile-baseline/command.result.json) | PASS: receipt and artifacts verified |
-| p1_review/oracle_existing | [receipt](runs/2026-11-07_21-44-17-652454_openmp-final-p1_review/oracle-existing.result.json) | PASS: receipt and artifacts verified |
-| p1_review/timing_smoke | [receipt](runs/2026-11-07_21-40-30-580882_openmp-correctness-p1_review/loaded-smoke.result.json) | PASS: receipt and artifacts verified |
-| p1_review/reduced | [receipt](runs/2026-11-07_21-40-30-580882_openmp-correctness-p1_review/reduced15.result.json) | PASS: receipt and artifacts verified |
-| p1_review/profile_smoke | [receipt](runs/2026-11-07_21-42-58-920729_openmp-profile-p1_review/command.result.json) | PASS: receipt and artifacts verified |
-| p2_review/oracle_existing | [receipt](runs/2026-11-07_21-41-02-128649_openmp-correctness-p2_review/oracle-existing.result.json) | PASS: receipt and artifacts verified |
-| p2_review/timing_smoke | [receipt](runs/2026-11-07_21-41-02-128649_openmp-correctness-p2_review/loaded-smoke.result.json) | PASS: receipt and artifacts verified |
-| p2_review/reduced | [receipt](runs/2026-11-07_21-41-02-128649_openmp-correctness-p2_review/reduced15.result.json) | PASS: receipt and artifacts verified |
-| p2_review/profile_smoke | [receipt](runs/2026-11-07_21-43-10-132860_openmp-profile-p2_review/command.result.json) | PASS: receipt and artifacts verified |
-| p3_review/oracle_existing | [receipt](runs/2026-11-07_21-41-35-548236_openmp-correctness-p3_review/oracle-existing.result.json) | PASS: receipt and artifacts verified |
-| p3_review/timing_smoke | [receipt](runs/2026-11-07_21-41-35-548236_openmp-correctness-p3_review/loaded-smoke.result.json) | PASS: receipt and artifacts verified |
-| p3_review/reduced | [receipt](runs/2026-11-07_21-41-35-548236_openmp-correctness-p3_review/reduced15.result.json) | PASS: receipt and artifacts verified |
-| p3_review/profile_smoke | [receipt](runs/2026-11-07_21-43-21-246405_openmp-profile-p3_review/command.result.json) | PASS: receipt and artifacts verified |
-| p4_review/oracle_existing | [receipt](runs/2026-11-07_21-42-12-515468_openmp-correctness-p4_review/oracle-existing.result.json) | PASS: receipt and artifacts verified |
-| p4_review/timing_smoke | [receipt](runs/2026-11-07_21-42-12-515468_openmp-correctness-p4_review/loaded-smoke.result.json) | PASS: receipt and artifacts verified |
-| p4_review/reduced | [receipt](runs/2026-11-07_21-42-12-515468_openmp-correctness-p4_review/reduced15.result.json) | PASS: receipt and artifacts verified |
-| p4_review/profile_smoke | [receipt](runs/2026-11-07_21-43-38-458910_openmp-profile-p4_review/command.result.json) | PASS: receipt and artifacts verified |
+| baseline/oracle_existing | [receipt](runs/2026-11-17_23-11-09-880893_p1-full-active-baseline/oracle-existing.result.json) | PASS: receipt and artifacts verified |
+| baseline/timing_smoke | [receipt](runs/2026-11-17_23-11-44-414939_p1-full-active/loaded-smoke.result.json) | PASS: receipt and artifacts verified |
+| baseline/reduced | [receipt](runs/2026-11-17_23-11-09-880893_p1-full-active-baseline/reduced15.result.json) | PASS: receipt and artifacts verified |
+| baseline/profile_smoke | [receipt](runs/2026-11-17_23-12-13-734807_p1-full-active-baseline-profile/command.result.json) | PASS: receipt and artifacts verified |
+| p1_full/oracle_existing | [receipt](runs/2026-11-17_23-11-44-414939_p1-full-active/oracle-existing.result.json) | PASS: receipt and artifacts verified |
+| p1_full/timing_smoke | [receipt](runs/2026-11-17_23-11-44-414939_p1-full-active/loaded-smoke.result.json) | PASS: receipt and artifacts verified |
+| p1_full/reduced | [receipt](runs/2026-11-17_23-11-44-414939_p1-full-active/reduced15.result.json) | PASS: receipt and artifacts verified |
+| p1_full/profile_smoke | [receipt](runs/2026-11-17_23-12-26-536176_p1-full-active-profile/command.result.json) | PASS: receipt and artifacts verified |
 
-Integrity receipt: [runs/2026-11-07_21-39-40-400840_integrity-check/integrity.result.json](runs/2026-11-07_21-39-40-400840_integrity-check/integrity.result.json).
+Integrity receipt: [runs/2026-11-18_12-34-51-619213_integrity-check/integrity.result.json](runs/2026-11-18_12-34-51-619213_integrity-check/integrity.result.json).
 
-Tooling receipt: [runs/2026-11-07_21-39-46-526022_tooling-tests/unittest.result.json](runs/2026-11-07_21-39-46-526022_tooling-tests/unittest.result.json).
+Tooling receipt: [runs/2026-11-18_12-36-03-167665_tooling-tests/unittest.result.json](runs/2026-11-18_12-36-03-167665_tooling-tests/unittest.result.json).
 
 Unmeasured work and limits:
 
@@ -91,9 +77,17 @@ Unmeasured work and limits:
 - Matrix memory records are selected allocation snapshots, not complete C-buffer accounting or peak live workspace.
 - Bounded sanitizer and allocation-failure checks are recorded separately in PATCH_REVIEW.md; they do not instrument the linked GraphBLAS/LAGraph libraries.
 - Reduced-data checks compare counts against a CNF reference that may be cached; exact small-case oracle checks are stronger evidence.
-- Fusion retains full global state dimensions and per-continuation work; the status does not imply a runtime or memory benefit.
 - Historical archived variants and pre-receipt logs are preserved evidence, not newly validated results.
+- The completed Avrora/Batik simple run compared p1_full against p1_review. Those results are reported in P1_FULL.md and remain separate from legacy full-recipe receipts.
 
 Failure history:
 
 - No failed receipt in this campaign. Historical failed/partial runs remain in legacy evidence.
+
+Requested Java-only comparison (separate simple-run results):
+
+```bash
+python3 run_simple.py --config configs/java_points_to.csv --variants baseline p1_full --reference baseline --source-sizes 1,10,100 --chunks 30 --rounds 5 --hot --dry-run
+```
+
+This selects Avrora and Batik and the two named variants. The one-shot timings include construction. Remove `--dry-run` to run the comparison. The Java results and legacy full-recipe results cover different workloads.

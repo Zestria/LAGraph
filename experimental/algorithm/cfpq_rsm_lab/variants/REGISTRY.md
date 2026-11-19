@@ -1,23 +1,38 @@
 # Variant registry
 
-Authoritative machine-readable data: [REGISTRY.csv](REGISTRY.csv). There are 86 registered snapshots (85 distinct source hashes): ten active and 76 archived. Identical historical copies are coalesced by full source hash except the explicit archived R13/current role; every original location is retained in [origins.json](origins.json). Snapshots are read-only and unique; do not overwrite them.
+The [registry catalog](REGISTRY.csv) lists 90 frozen snapshots with 89 distinct hashes. It includes 3 active snapshots and 87 archived snapshots. Sources are read-only and hash-checked.
+
+## Retained active sources
 
 | Name | Parent | Meaning | Source | Diff |
 | --- | --- | --- | --- | --- |
-| baseline | git:ba6e4308 | Agreed pre-DeepSeek production, commit ba6e4308 | [baseline__c7efb94f21bb.c](active/baseline__c7efb94f21bb.c) | [diff](../patches/active/baseline.patch) |
-| p1 | baseline | Standalone compact grouped terminal transfers | [p1__d586b953e263.c](active/p1__d586b953e263.c) | [diff](../patches/active/p1.patch) |
-| p2 | baseline | Standalone conservative trimming and state/terminal compaction | [p2__791520ee778c.c](active/p2__791520ee778c.c) | [diff](../patches/active/p2.patch) |
-| p3 | baseline | Standalone destination-local waiting prefixes and return routing | [p3__2c17d032db6d.c](active/p3__2c17d032db6d.c) | [diff](../patches/active/p3.patch) |
-| p4 | baseline | Standalone fused single-terminal continuations; global W remains uncompressed | [p4__0fe833ec9687.c](active/p4__0fe833ec9687.c) | [diff](../patches/active/p4.patch) |
-| stack_p1234 | baseline | Original DeepSeek cumulative P1+P2+P3+P4, byte-identical preserved snapshot | [stack_p1234__4e3a96853528.c](active/stack_p1234__4e3a96853528.c) | [diff](../patches/active/stack_p1234.patch) |
-| p1_review | p1 | Reviewed grouped transfers: destination endpoint sharing, temporary forward hash, checked sizing | [source](active/p1_review__1c5ad06ef855.c) | [diff](../patches/active/p1_review.patch) |
-| p2_review | p2 | Reviewed trimming: reuse extracted control edges and bypass identity remapping | [source](active/p2_review__dc0f7c50405b.c) | [diff](../patches/active/p2_review.patch) |
-| p3_review | p3 | Reviewed local waiting: direct range scatter for a single destination | [source](active/p3_review__35109ff0c008.c) | [diff](../patches/active/p3_review.patch) |
-| p4_review | p4 | Reviewed fusion: active-block dispatch, per-callee eligibility and ordinary-product fallback | [source](active/p4_review__7eefac364098.c) | [diff](../patches/active/p4_review.patch) |
+| baseline | git:ba6e4308 | Agreed pre-DeepSeek production, commit ba6e4308 | [source](active/baseline__c7efb94f21bb.c) | [diff](../patches/active/baseline.patch) |
+| p1_full | p1_review | Full coordinates with batched transfers, endpoint sharing and support filtering | [source](active/p1_full__0f85bb5f1dc6.c) | [diff](../patches/active/p1_full.patch) |
+| p1_full_clean | p1_full | Refactored full-coordinate candidate for timing comparisons | [source](active/p1_full_clean__655586ec2c10.c) | [diff](../patches/active/p1_full_clean.patch) |
 
-The active baseline is commit `ba6e4308`, SHA-256 `c7efb94f21bbbddc220ab8371d01cd4c852e3ab110d5942367932676f8916928`. The older corrected reference, exact BB7 source, R13 current source, I/S historical rounds, DS/D rounds, intermediate cumulative DeepSeek versions, and generated diagnostic sources are indexed in the CSV. Archived correctness/benchmarks are prior evidence, not fresh acceptance. Some archived layouts are explicitly unsupported by the generator; active layouts must all generate and run.
+See [P1_FULL.md](../P1_FULL.md) for the completed Avrora/Batik comparison and validation. The `p1_full` patch uses the archived `p1_review` snapshot as its parent.
 
-`parent=unknown` is not invented ancestry: `diff_parent` still names the exact source used by the reproducible comparison diff. Active p1–p4 all have baseline as both parent and diff_parent. The cumulative stack also has a complete baseline-relative diff; its original cumulative lineage is recorded in origins.json.
+## Relocated historical sources
+
+The following snapshots are preserved in `archive/`. Their logical names, ancestry, source hashes, patches and prior measurements remain in the catalog. Archived sources require explicit low-level access.
+
+| Name | Parent | Source | Diff |
+| --- | --- | --- | --- |
+| p1_review | p1 | [source](archive/p1_review__1c5ad06ef855.c) | [diff](../patches/archive/p1_review.patch) |
+| p1_blocks | p1_review | [source](archive/p1_blocks__697452884c07.c) | [diff](../patches/archive/p1_blocks.patch) |
+| p1 | baseline | [source](archive/p1__d586b953e263.c) | [diff](../patches/archive/p1.patch) |
+| p2 | baseline | [source](archive/p2__791520ee778c.c) | [diff](../patches/archive/p2.patch) |
+| p3 | baseline | [source](archive/p3__2c17d032db6d.c) | [diff](../patches/archive/p3.patch) |
+| p4 | baseline | [source](archive/p4__0fe833ec9687.c) | [diff](../patches/archive/p4.patch) |
+| stack_p1234 | baseline | [source](archive/stack_p1234__4e3a96853528.c) | [diff](../patches/archive/stack_p1234.patch) |
+| p2_review | p2 | [source](archive/p2_review__dc0f7c50405b.c) | [diff](../patches/archive/p2_review.patch) |
+| p3_review | p3 | [source](archive/p3_review__35109ff0c008.c) | [diff](../patches/archive/p3_review.patch) |
+| p4_review | p4 | [source](archive/p4_review__7eefac364098.c) | [diff](../patches/archive/p4_review.patch) |
+| p1_prepared | p1_review | [source](archive/p1_prepared__c26e8e4a08c8.c) | [diff](../patches/archive/p1_prepared.patch) |
+
+The original standalone P1-P4 snapshots and reviewed sources retain their declared comparison parents. `p1_review` still derives from the now-archived original P1. The cumulative stack remains historical. The prepared prototype excludes construction in its historical adapter and is not used for current end-to-end measurements; see [PREPARED_P1.md](../PREPARED_P1.md).
+
+Pre-cleanup campaign/catalog/document snapshots and the exact move manifest are retained in [the backup](../archive/campaigns/2026-11-17_13-33-11_before-full-coordinates/). See [origins.json](origins.json) for original locations and relocation metadata.
 
 <!-- BEGIN GENERATED VALIDATION STATUS -->
 
@@ -26,9 +41,6 @@ Current evidence is generated by `make status`; full receipt details are in [VAL
 | Active name | Correctness checks | Tiny profiling | Full performance |
 | --- | --- | --- | --- |
 | baseline | PASS | PASS | NOT MEASURED |
-| p1_review | PASS | PASS | NOT MEASURED |
-| p2_review | PASS | PASS | NOT MEASURED |
-| p3_review | PASS | PASS | NOT MEASURED |
-| p4_review | PASS | PASS | NOT MEASURED |
+| p1_full | PASS | PASS | NOT MEASURED |
 
 <!-- END GENERATED VALIDATION STATUS -->

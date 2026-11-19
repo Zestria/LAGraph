@@ -2,7 +2,7 @@
 
 Reviewed standalone p1–p4 against the unchanged `c7efb94f21bb` production baseline.
 Original snapshots, original patches, and `stack_p1234` are preserved. The revised
-standalone candidates are the default `make compare` selection; the stack has
+standalone candidates and their patches are archived. The stack has
 not been recomposed. No full performance experiment was run.
 
 | Candidate | Changes made | Remaining limit |
@@ -24,10 +24,10 @@ string literals. The failed profiling receipt remains in campaign history.
 
 ## Exact candidate artifacts
 
-- **p1_review**: [patch](patches/active/p1_review.patch), [source](variants/active/p1_review__1c5ad06ef855.c), SHA-256 `1c5ad06ef8558104c9c6f66a90e63aea50f7e187aedaa3a47630b3650a44da3f`.
-- **p2_review**: [patch](patches/active/p2_review.patch), [source](variants/active/p2_review__dc0f7c50405b.c), SHA-256 `dc0f7c50405bd2cb1ee3d2b9aa7407eecd88bbdcf4318a9e81b05e2bc85e9270`.
-- **p3_review**: [patch](patches/active/p3_review.patch), [source](variants/active/p3_review__35109ff0c008.c), SHA-256 `35109ff0c008ba62b095c1500a7df6d1111e505be8dd636dec2e89831a0857b0`.
-- **p4_review**: [patch](patches/active/p4_review.patch), [source](variants/active/p4_review__7eefac364098.c), SHA-256 `7eefac364098f9f1d6ae353962d4d9baf7be9ed1d96a30160e4698871a671823`.
+- **p1_review**: [patch](patches/archive/p1_review.patch), [source](variants/archive/p1_review__1c5ad06ef855.c), SHA-256 `1c5ad06ef8558104c9c6f66a90e63aea50f7e187aedaa3a47630b3650a44da3f`.
+- **p2_review**: [patch](patches/archive/p2_review.patch), [source](variants/archive/p2_review__dc0f7c50405b.c), SHA-256 `dc0f7c50405bd2cb1ee3d2b9aa7407eecd88bbdcf4318a9e81b05e2bc85e9270`.
+- **p3_review**: [patch](patches/archive/p3_review.patch), [source](variants/archive/p3_review__35109ff0c008.c), SHA-256 `35109ff0c008ba62b095c1500a7df6d1111e505be8dd636dec2e89831a0857b0`.
+- **p4_review**: [patch](patches/archive/p4_review.patch), [source](variants/archive/p4_review__7eefac364098.c), SHA-256 `7eefac364098f9f1d6ae353962d4d9baf7be9ed1d96a30160e4698871a671823`.
 
 ## Validation
 

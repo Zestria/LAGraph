@@ -891,6 +891,20 @@ def instrument_active(source: str) -> str:
         snprintf(name, sizeof(name), "group[%zu].tmp", a); cfpq_prof_matrix(prof->matrix, prof->tag, prof->call_id, name, groupset.groups[a].tmp);
     }
 '''
+        if 's_group_build_blocks' in source:
+            snapshots+='''
+    if (prof->enabled) for (size_t a = 0; a < groupset.ngroups; ++a) {
+        char name[96];
+        snprintf(name, sizeof(name), "group[%zu].D", a);
+        cfpq_prof_matrix(prof->matrix, prof->tag, prof->call_id, name, groupset.groups[a].D);
+        if (groupset.groups[a].frontier_tiles != NULL)
+            for (size_t m = 0; m < groupset.groups[a].ntrans; ++m) {
+                snprintf(name, sizeof(name), "group[%zu].F[%zu]", a, m);
+                cfpq_prof_matrix(prof->matrix, prof->tag, prof->call_id, name,
+                                 groupset.groups[a].frontier_tiles[m]);
+            }
+    }
+'''
     if re.search(r'S_(?:WaitBox|FusionBox)\s*\*fusion_boxes', body):
         snapshots+='''
     if (prof->enabled && fusion_boxes != NULL) for (size_t a = 0; a < num_nonterm; ++a)

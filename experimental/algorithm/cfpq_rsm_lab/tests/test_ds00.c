@@ -1803,6 +1803,67 @@ static bool expect_error(const Case *c, const GrB_Index *sources, size_t num_sou
     return ok;
 }
 
+// Full block axes must preserve member identity and vertex positions even
+// with holes, permuted continuation states, and vertices at both ends of a
+// block. The cross-field edges below must not introduce extra destinations.
+static void test_block_family_alignment(void)
+{
+    Case c;
+    if (!case_new(&c, /*Q=*/6, /*V=*/17, /*nt=*/6, /*nn=*/1, 0))
+        return;
+    c.start_states[0] = 0;
+    CHECK(case_term(&c, 0, 0, 5)); // load0
+    CHECK(case_term(&c, 1, 0, 1)); // load1
+    CHECK(case_term(&c, 2, 0, 3)); // load2
+    CHECK(case_term(&c, 3, 5, 2)); // store0
+    CHECK(case_term(&c, 4, 1, 2)); // store1
+    CHECK(case_term(&c, 5, 3, 2)); // store2
+    CHECK(case_final(&c, 0, 2));
+
+    CHECK(case_graph(&c, 0, 0, 16));
+    CHECK(case_graph(&c, 0, 7, 2));
+    CHECK(case_graph(&c, 1, 0, 8));
+    CHECK(case_graph(&c, 1, 12, 4));
+    CHECK(case_graph(&c, 2, 0, 0));
+    CHECK(case_graph(&c, 3, 16, 3));
+    CHECK(case_graph(&c, 3, 2, 14));
+    CHECK(case_graph(&c, 4, 8, 10));
+    CHECK(case_graph(&c, 4, 4, 6));
+    CHECK(case_graph(&c, 5, 0, 15));
+    CHECK(case_graph(&c, 3, 8, 11));  // load1/store0: reject
+    CHECK(case_graph(&c, 4, 16, 13)); // load0/store1: reject
+    CHECK(case_graph(&c, 5, 16, 9));  // load0/store2: reject
+    CHECK(check_case(&c, "block-family-permuted-states-and-holes", "3,6,10,14,15"));
+    case_free(&c);
+}
+
+// A dual family may contain more members than there are RSM states. Its full
+// axis must be member*V+v, not state*V+v. The oracle also checks singleton
+// sources, including source 1, for which the correct result is empty.
+static void test_full_coordinate_dual_axis(void)
+{
+    Case c;
+    if (!case_new(&c, /*Q=*/3, /*V=*/4, /*nt=*/7, /*nn=*/1, 0))
+        return;
+    c.start_states[0] = 0;
+    for (GrB_Index t = 0; t < 3; ++t)
+        CHECK(case_term(&c, t, 0, 1));
+    for (GrB_Index t = 3; t < 6; ++t)
+        CHECK(case_term(&c, t, 2, 1));
+    CHECK(case_term(&c, 6, 0, 2));
+    CHECK(case_final(&c, 0, 1));
+    CHECK(case_graph(&c, 0, 0, 1));
+    CHECK(case_graph(&c, 1, 2, 0));
+    CHECK(case_graph(&c, 2, 3, 2));
+    CHECK(case_graph(&c, 3, 1, 2));
+    CHECK(case_graph(&c, 4, 0, 3));
+    CHECK(case_graph(&c, 5, 2, 1));
+    CHECK(case_graph(&c, 6, 0, 0));
+    CHECK(case_graph(&c, 6, 3, 1));
+    CHECK(check_case(&c, "full-coordinate-dual-members-exceed-states", "0,1,2,3"));
+    case_free(&c);
+}
+
 static void test_invalid_input(void)
 {
     // valid baseline instance
@@ -3346,6 +3407,8 @@ static void test_list(void)
     test_stored_false();
     test_indexed_families();
     test_grouped_families();
+    test_block_family_alignment();
+    test_full_coordinate_dual_axis();
     test_invalid_input();
     test_malformed_dimensions();
     test_trimming_compaction();

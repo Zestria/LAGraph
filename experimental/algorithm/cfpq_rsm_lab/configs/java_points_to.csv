@@ -1,0 +1,2 @@
+data/graphs/java/avrora.g,data/grammars/java_points_to.cnf,-1,results/experiment_2026-10-26_20-59-13/candidates/java_points_to_avrora_start.result
+data/graphs/java/batik.g,data/grammars/java_points_to.cnf,-1,results/experiment_2026-10-26_20-59-13/candidates/java_points_to_batik_start.result

@@ -434,7 +434,7 @@ def render_current(report: dict) -> str:
               'All timed/profile recipes use inherited OpenMP threading. The tooling never sets or unsets OpenMP variables; GraphBLAS/OpenMP choose parallelism. Recipes pin seed 2026, blocked order, one warm-up, the executable path/hash, graphs/CNF/RSM/source pools, and runtime dependencies in `inputs/pinned.json`. Legacy threads=0 means inheritance, not a thread count. The 200-case oracle uses seed 2026. Reduced counts may use the CNF-reference cache; exact small-case oracle checks provide stronger set evidence.', '',
               'Inherited OpenMP environment: `'+json.dumps(report['openmp_environment'],sort_keys=True)+'`. CPU affinity: `'+json.dumps(report['cpu_affinity'])+'`. An empty environment record means runtime defaults. Actual per-operation thread counts are not measured. Receipts from a different environment or affinity are STALE for this invocation.', '',
               'Reproduce from the lab root:', '', '```bash', 'make status', 'make status-check', 'make list',
-              'make verify', 'make tooling-tests', 'make correctness VARIANT=all',
+              'make verify', 'make tooling-tests', *[f'make correctness VARIANT={n}' for n in report['variants']],
               'make profile VARIANT='+next(reversed(report['variants'])),
               'make compare RECIPE=full SIZES=100 VARIANTS='+','.join(report['variants'])+' DRY_RUN=1','```','',
               'The final command only prints the expensive full recipe. Removing DRY_RUN deliberately starts performance work; it is not part of the current validation.', '',
@@ -449,6 +449,13 @@ def render_current(report: dict) -> str:
     lines += ['', 'Failure history:', '']
     lines += [f"- [{r['receipt']}]({r['receipt']}): {r['outcome']} / exit {r['exit_code']} ({r['kind']})." for r in report['failed_attempts']] or ['- No failed receipt in this campaign. Historical failed/partial runs remain in legacy evidence.']
     if report['problems']:lines += ['', 'Attention required:', '']+['- '+p for p in report['problems']]
+    if 'java_comparison' in definition:
+        java=definition['java_comparison']
+        lines += ['', 'Requested Java-only comparison (separate simple-run results):', '', '```bash',
+                  'python3 run_simple.py --config '+java['config']+' --variants '+' '.join(java['variants'])+
+                  ' --reference '+java['reference']+' --source-sizes '+','.join(map(str,java['source_sizes']))+
+                  ' --chunks '+str(java['chunks'])+' --rounds '+str(java['rounds'])+' --hot --dry-run',
+                  '```', '', 'This selects Avrora and Batik and the two named variants. The one-shot timings include construction. Remove `--dry-run` to run the comparison. The Java results and legacy full-recipe results cover different workloads.']
     return '\n'.join(lines)+'\n'
 
 

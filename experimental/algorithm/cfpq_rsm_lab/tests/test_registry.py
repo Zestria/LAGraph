@@ -28,8 +28,12 @@ class RegistryTests(unittest.TestCase):
         for name,row in labstate.registry().items():
             with self.subTest(name=name):
                 source=labstate.source(name,allow_archived=True).read_text()
-                if row['profiling'].startswith('unsupported-historical'):
-                    self.assertEqual(row['status'],'archived')
+                if row['profiling'].startswith('unsupported-candidate:'):
+                    self.assertEqual(row['status'], 'active')
+                    with self.assertRaisesRegex(SystemExit, 'anchor'):
+                        profile.instrument(source)
+                elif row['profiling'].startswith(('unsupported-historical', 'unsupported-prepared')):
+                    self.assertEqual(row['status'], 'archived')
                     with self.assertRaisesRegex(SystemExit,'anchor'):
                         profile.instrument(source)
                 else:
@@ -44,22 +48,36 @@ class RegistryTests(unittest.TestCase):
         rows=labstate.registry()
         names=['baseline','p1','p2','p3','p4','stack_p1234']
         reviewed = ['p1_review','p2_review','p3_review','p4_review']
-        self.assertEqual([n for n,r in rows.items() if r['status']=='active'],names+reviewed)
+        kept = ['baseline', 'p1_full', 'p1_full_clean']
+        self.assertCountEqual([n for n,r in rows.items() if r['status']=='active'], kept)
+        self.assertEqual(set((LAB/'variants/active').iterdir()),
+                         {LAB/rows[n]['source'] for n in kept})
+        self.assertEqual(set((LAB/'patches/active').iterdir()),
+                         {LAB/rows[n]['diff'] for n in kept})
+        self.assertEqual(rows['p1_full']['parent'], 'p1_review')
+        self.assertEqual(rows['p1_full']['diff_parent'], 'p1_review')
+        self.assertEqual(rows['p1_full_clean']['parent'], 'p1_full')
+        self.assertEqual(rows['p1_full_clean']['diff_parent'], 'p1_full')
+        for n in names[1:] + reviewed + ['p1_prepared', 'p1_blocks']:
+            self.assertEqual(rows[n]['status'], 'archived')
+            self.assertEqual(Path(rows[n]['source']).parent, Path('variants/archive'))
+            self.assertEqual(Path(rows[n]['diff']).parent, Path('patches/archive'))
         for n in names[1:]:self.assertEqual(rows[n]['parent'],'baseline')
         for n in reviewed:
             self.assertEqual(rows[n]['parent'], n.removesuffix('_review'))
             self.assertEqual(rows[n]['diff_parent'], 'baseline')
-        texts={n:labstate.source(n).read_text() for n in names}
+        texts={n:labstate.source(n,allow_archived=True).read_text() for n in names}
         self.assertNotIn('s_build_groups',texts['p2'])
         self.assertNotIn('s_compact_build',texts['p3'])
         self.assertNotIn('s_shift_compact',texts['p4'])
         self.assertNotIn('s_build_groups',texts['p4'])
         self.assertEqual(len({rows[n]['sha256'] for n in names}),6)
-        self.assertEqual((LAB.parent/'LAGraph_CFPQ_RSM.c').read_bytes(),labstate.source('baseline').read_bytes())
-        self.assertNotIn('s_build_groups',labstate.source('p2_review').read_text())
-        self.assertNotIn('s_compact_build',labstate.source('p3_review').read_text())
-        self.assertNotIn('s_shift_compact',labstate.source('p4_review').read_text())
-        self.assertNotIn('s_build_groups',labstate.source('p4_review').read_text())
+        # A local production edit cannot change what the frozen baseline means.
+        self.assertEqual(rows['baseline']['sha256'], 'c7efb94f21bbbddc220ab8371d01cd4c852e3ab110d5942367932676f8916928')
+        self.assertNotIn('s_build_groups',labstate.source('p2_review',allow_archived=True).read_text())
+        self.assertNotIn('s_compact_build',labstate.source('p3_review',allow_archived=True).read_text())
+        self.assertNotIn('s_shift_compact',labstate.source('p4_review',allow_archived=True).read_text())
+        self.assertNotIn('s_build_groups',labstate.source('p4_review',allow_archived=True).read_text())
 
     def test_stray_flat_baseline_cannot_shadow_registry(self):
         with tempfile.TemporaryDirectory() as t:
@@ -70,6 +88,12 @@ class RegistryTests(unittest.TestCase):
             with patch.object(run,'LAB_DIR',root),patch.object(run.labstate,'source',return_value=expected) as resolve:
                 self.assertEqual(run.variant_source('baseline',args,root/'out'),expected)
                 resolve.assert_called_once_with('baseline',allow_archived=False)
+
+    def test_full_candidate_preserves_nonterminal_fixed_point_code(self):
+        marker = '// Phases 2+3:'
+        parent = labstate.source('p1_review', allow_archived=True).read_text()
+        candidate = labstate.source('p1_full').read_text()
+        self.assertEqual(candidate.split(marker, 1)[1], parent.split(marker, 1)[1])
 
     def test_tampered_source_is_rejected(self):
         with tempfile.TemporaryDirectory() as t:

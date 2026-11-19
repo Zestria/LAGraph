@@ -1,5 +1,25 @@
 # CFPQ RSM experiment environment
 
+Timing includes static construction of optimized traversals. Production is the
+agreed baseline; use lab variants `baseline p1_review` with the default
+`inputs/pinned.json` and its original one-shot binary. The prepared API and
+CFG_bench adapter change were reverted on 2026-11-17. See
+[PREPARED_P1.md](/home/hollow/repo/LAGraph/experimental/algorithm/cfpq_rsm_lab/PREPARED_P1.md)
+for the preserved lab-only implementation, patches and historical evidence.
+The historical prepared binary excludes construction and is unsuitable for
+end-to-end algorithm comparisons.
+
+For new straightforward timing runs use
+[run_simple.py](/home/hollow/repo/LAGraph/experimental/algorithm/cfpq_rsm_lab/run_simple.py).
+It builds selected registered kernels and passes `--hot -r 5` directly to
+`cfg_bench`: each chunk gets one warm-up, then five consecutive measurements.
+Its defaults are Java points-to, baseline/P1 reviewed, sources 1/10/100 and
+30 chunks. `--dry-run` prints the build and benchmark commands without running
+them. There is no profiling or outer repetition loop. See the beginning of
+[README.md](/home/hollow/repo/LAGraph/experimental/algorithm/cfpq_rsm_lab/README.md)
+for the flags, simple correctness check and summary columns. The legacy tools
+described below repeat whole passes and use a different output/status format.
+
 The current reviewed candidates are `p1_review`–`p4_review`, with immutable
 baseline-relative diffs and original p1–p4 ancestry in the registry. See
 [PATCH_REVIEW.md](/home/hollow/repo/LAGraph/experimental/algorithm/cfpq_rsm_lab/PATCH_REVIEW.md).

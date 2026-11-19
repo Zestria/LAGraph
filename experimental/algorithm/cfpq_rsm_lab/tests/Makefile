@@ -23,7 +23,7 @@ GRAPHBLAS_LIBDIR ?= /home/hollow/repo/GraphBLAS/build
 GRAPHBLAS_INCDIR ?= /usr/local/include/suitesparse
 CC         ?= cc
 CFLAGS     ?= -O2 -g -std=c11 -Wall -Wextra -Wno-unused-parameter
-INCLUDES   := -I$(LAGRAPH)/include -I$(LAGRAPH)/src/utility -I$(LAGRAPH)/src/test/include \
+INCLUDES   := -I$(LAGRAPH)/include -I$(LAB)/include -I$(LAGRAPH)/src/utility -I$(LAGRAPH)/src/test/include \
               -I$(GRAPHBLAS_INCDIR)
 LDPATHS    := -L$(BUILD)/src -L$(BUILD)/src/test -L$(GRAPHBLAS_LIBDIR)
 RPATHS     := -Wl,-rpath,$(abspath $(BUILD)/src) -Wl,-rpath,$(abspath $(BUILD)/src/test) \
@@ -33,11 +33,12 @@ LDLIBS     := -llagraph -llagraphtest -lgraphblas -lm
 PARENT     := $(LAB)/../LAGraph_CFPQ_RSM.c
 CANDIDATE  ?= $(PARENT)
 R2         ?= $(PARENT)
+PREPARED   ?= $(LAB)/variants/archive/p1_prepared__c26e8e4a08c8.c
 TEST_SRC   := test_ds00.c oracle.c
 
 BIN_DIR    := ../build/tests
 
-.PHONY: all check check-cases existing production alloc asan clean dirs
+.PHONY: all check check-cases check-prepared existing production alloc asan clean dirs
 
 all: dirs candidate_correctness_r2 existing_candidate_r2
 
@@ -86,6 +87,12 @@ check-cases: candidate_correctness_r2
 
 existing: existing_candidate_r2
 	$(BIN_DIR)/existing_candidate_r2
+
+# Historical prepared API tests select the lab snapshot, never production.
+check-prepared: dirs $(PREPARED) test_prepared.c $(TEST_SRC) oracle.h
+	$(CC) $(CFLAGS) -Wno-unused-function $(INCLUDES) -o $(BIN_DIR)/prepared \
+	    $(PREPARED) test_prepared.c oracle.c $(LDPATHS) $(RPATHS) $(LDLIBS)
+	$(BIN_DIR)/prepared
 
 production: production_control
 	$(BIN_DIR)/production_control --no-random

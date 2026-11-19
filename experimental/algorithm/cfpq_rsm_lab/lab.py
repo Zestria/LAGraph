@@ -21,7 +21,7 @@ def arguments():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('action', choices=['list', 'verify', 'check', 'correctness', 'compare', 'profile', 'plot', 'tooling-tests', 'status', 'status-check'])
     p.add_argument('--variant', default='baseline', help='registered active name, or all for checks')
-    p.add_argument('--variants', default='baseline,p1,p2,p3,p4,stack_p1234')
+    p.add_argument('--variants', default='baseline,p1_full')
     p.add_argument('--recipe', default=None, help='smoke/full or profile_smoke/profile_workloads, from inputs/pinned.json')
     p.add_argument('--sizes', help='subset of the recipe source sizes, comma-separated')
     p.add_argument('--run', type=Path, help='completed timing run to plot')

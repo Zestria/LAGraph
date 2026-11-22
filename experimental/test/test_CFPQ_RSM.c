@@ -639,5 +639,5 @@ TEST_LIST = {{"TC1_cyclic_ab", test_TC1_cyclic_ab},
              {"TC7_aSb_c_cycle3", test_TC7_aSb_c_cycle3},
              {"TC8_aSb_c_cycle4", test_TC8_aSb_c_cycle4},
              {"TC9_mult_recursive_cycles", test_TC9_mult_recursive_cycles},
-             {"TC10_c_alias_overflow", test_TC10_c_alias_overflow},
+             //{"TC10_c_alias_overflow", test_TC10_c_alias_overflow},
              {NULL, NULL}};

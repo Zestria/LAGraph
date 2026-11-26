@@ -378,7 +378,7 @@ static void init_graph_c_alias_overflow(void)
 }
 
 #define run_algorithm(sources, num_sources)                                                        \
-    LAGraph_CFPQ_RSM(&result, rsm, graph_term, (sources), (num_sources), V, msg);
+    LAGraph_CFPQ_RSM(&result, rsm, graph_term, (sources), (num_sources), V, false, msg);
 
 //==============================================================================
 // test cases

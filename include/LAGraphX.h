@@ -854,7 +854,8 @@ int LAGraph_RegularPathQuery    // nodes reachable from the starting by the
     const GrB_Index *S,         // source vertices to start searching paths
     size_t ns,                  // number of source vertices
     char *msg                   // LAGraph output message
-);
+) ;
+
 //****************************************************************************
 LAGRAPHX_PUBLIC
 int LAGraph_VertexCentrality_Triangle       // vertex triangle-centrality
@@ -1418,18 +1419,23 @@ GrB_Info LAGraph_CFL_check_base_inputs(
 
 typedef struct
 {
-    GrB_Index state_count;
-    GrB_Index terminal_count;
-    GrB_Index nonterminal_count;
-    GrB_Index start_nonterminal;
-    GrB_Matrix *terminal_matrices;
-    GrB_Matrix *nonterminal_matrices;
-    GrB_Index *start_states;
-    GrB_Vector *final_states;
+    GrB_Index state_count;        
+    GrB_Index terminal_count;       
+    GrB_Index nonterminal_count;     
+    GrB_Index start_nonterminal;    
+    GrB_Matrix *terminal_matrices;   
+    GrB_Matrix *nonterminal_matrices; 
+    GrB_Index *start_states;          
+    GrB_Vector *final_states;         
 } RSM;
 
+LAGRAPHX_PUBLIC
 int LAGraph_CFPQ_RSM(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *graph_term,
-                     const GrB_Index *sources, size_t num_sources, GrB_Index V, char *msg);
+                            const GrB_Index *sources, size_t num_sources, GrB_Index V,
+                            bool batch_terminal_transitions, char *msg);
+
+int LAGraph_CFPQ_RSM_blocked(GrB_Vector *reachable, const RSM *rsm, const GrB_Matrix *graph_term,
+                             const GrB_Index *sources, size_t num_sources, GrB_Index V, char *msg);
 
 GrB_Info LAGraph_CFL_AllPaths_Kronecker(GrB_Matrix *M_intersect_out, GrB_Matrix *outputs,
                                         const GrB_Matrix *adj_matrices,
